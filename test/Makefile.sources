@@ -1,5 +1,6 @@
 # Tests (sorted by expected completion time)
 TESTPROGRAMS =			      \
+	repeat-test		      \
 	oob-test		      \
 	infinite-loop		      \
 	trap-crasher		      \
