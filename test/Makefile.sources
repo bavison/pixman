@@ -1,6 +1,7 @@
 # Tests (sorted by expected completion time)
 TESTPROGRAMS =			\
 	prng-test		\
+	repeat-test             \
 	a1-trap-test		\
 	radial-invalid		\
 	pdf-op-test		\

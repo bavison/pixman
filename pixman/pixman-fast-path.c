@@ -1468,6 +1468,297 @@ fast_composite_tiled_repeat (pixman_implementation_t *imp,
 	_pixman_image_fini (&extended_src_image);
 }
 
+static uint32_t
+read_bits_sample (pixman_implementation_t *imp, pixman_image_t *image, uint32_t x, uint32_t y)
+{
+    uint32_t *line = image->bits.bits + y * image->bits.rowstride;
+    uint8_t *line8 = (uint8_t *) line;
+    uint32_t result;
+    pixman_iter_t iter;
+
+    if (image->bits.format == PIXMAN_a8r8g8b8)
+        return line[x];
+    if (image->bits.format == PIXMAN_x8r8g8b8)
+        return line[x] | 0xFF000000;
+    if (image->bits.format == PIXMAN_a8)
+        return line8[x] << 24;
+
+    _pixman_implementation_iter_init (
+            imp, &iter, image, x, y, 1, 1,
+            (uint8_t *) &result,
+            ITER_NARROW | ITER_SRC, image->common.flags);
+
+    result = *iter.get_scanline (&iter, NULL);
+
+    if (iter.fini)
+        iter.fini (&iter);
+
+    return result;
+}
+
+static void
+fast_composite_pad_repeat (pixman_implementation_t *imp,
+                           pixman_composite_info_t *info)
+{
+    PIXMAN_COMPOSITE_ARGS (info);
+    pixman_implementation_t *imp_border = imp;
+    pixman_composite_info_t info2 = *info;
+    pixman_composite_func_t func, func_border;
+    pixman_format_code_t mask_format, mask_format_border;
+    uint32_t src_flags, src_flags_border, mask_flags, mask_flags_border;
+    solid_fill_t src_solid, mask_solid;
+    pixman_image_t *src_image_border = (pixman_image_t *) &src_solid;
+    pixman_image_t *mask_image_border;
+    int32_t thresh_left, thresh_right, thresh_top, thresh_bottom;
+    int32_t x_skip, y_skip;
+
+    src_flags = (info->src_flags & ~FAST_PATH_PAD_REPEAT) |
+                    FAST_PATH_SAMPLES_COVER_CLIP_NEAREST;
+    src_flags_border = FAST_PATH_STANDARD_FLAGS;
+    _pixman_image_init (src_image_border);
+    src_image_border->type = SOLID;
+    src_image_border->common.extended_format_code = PIXMAN_solid;
+    src_image_border->common.flags = src_flags_border;
+
+    if (mask_image)
+    {
+        if (mask_x != src_x || mask_y != src_y ||
+            mask_image->bits.width != src_image->bits.width ||
+            mask_image->bits.height != src_image->bits.height ||
+            mask_image->common.repeat != PIXMAN_REPEAT_PAD)
+        {
+            /* Have to fall back general_composite_rect() in this case.
+             * However, that's a static function outside our scope, and
+             * _pixman_implementation_lookup_composite() would just
+             * end up here again, so search for it manually... */
+            const pixman_fast_path_t *fast_path;
+            imp = imp->fallback;
+            fast_path = imp->fast_paths;
+            while (fast_path->op != PIXMAN_OP_NONE)
+            {
+                if (fast_path->op == PIXMAN_OP_any &&
+                    fast_path->src_format == PIXMAN_any &&
+                    fast_path->mask_format == PIXMAN_any &&
+                    fast_path->dest_format == PIXMAN_any)
+                {
+                    fast_path->func (imp, info);
+                    break;
+                }
+                ++fast_path;
+            }
+            return;
+        }
+
+        mask_flags = info->mask_flags;
+        mask_flags_border = FAST_PATH_STANDARD_FLAGS;
+        mask_format = mask_image->common.extended_format_code;
+        mask_format_border = PIXMAN_solid;
+        mask_image_border = (pixman_image_t *) &mask_solid;
+        _pixman_image_init (mask_image_border);
+        mask_image_border->type = SOLID;
+        mask_image_border->common.extended_format_code = PIXMAN_solid;
+        mask_image_border->common.flags = mask_flags_border;
+    }
+    else
+    {
+        mask_flags = mask_flags_border = FAST_PATH_IS_OPAQUE;
+        mask_format = mask_format_border = PIXMAN_null;
+        mask_image_border = NULL;
+    }
+
+    _pixman_implementation_lookup_composite (
+        imp->toplevel, info->op,
+        src_image->common.extended_format_code, src_flags,
+        mask_format, mask_flags,
+        dest_image->common.extended_format_code, info->dest_flags,
+        &imp, &func);
+    _pixman_implementation_lookup_composite (
+        imp_border->toplevel, info->op,
+        PIXMAN_solid, src_flags_border,
+        mask_format_border, mask_flags_border,
+        dest_image->common.extended_format_code, info->dest_flags,
+        &imp_border, &func_border);
+
+    x_skip = src_x < 0 ? 0 : src_x;
+    y_skip = src_y < 0 ? 0 : src_y;
+    if (src_image->bits.width == 1)
+    {
+        src_x = -width;
+        thresh_left = thresh_right = 0;
+    }
+    else
+    {
+        thresh_left = 0;
+        thresh_right = src_image->bits.width;
+        if (src_x > thresh_left)
+            thresh_left = src_x;
+        if (thresh_left > thresh_right)
+            thresh_right = thresh_left;
+        if (src_x + width < thresh_right)
+            thresh_right = src_x + width;
+        if (thresh_right < thresh_left)
+            thresh_left = thresh_right;
+    }
+    thresh_top = 0;
+    thresh_bottom = src_image->bits.height;
+    if (src_y > thresh_top)
+        thresh_top = src_y;
+    if (thresh_top > thresh_bottom)
+        thresh_bottom = thresh_top;
+    if (src_y + height < thresh_bottom)
+        thresh_bottom = src_y + height;
+    if (thresh_bottom < thresh_top)
+        thresh_top = thresh_bottom;
+
+    if (src_y < thresh_top)
+    {
+        if (src_x < thresh_left)
+        {
+            src_solid.color_32 = read_bits_sample (imp, src_image, 0, 0);
+            if (mask_image)
+                mask_solid.color_32 = read_bits_sample (imp, mask_image, 0, 0);
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.width = thresh_left - src_x;
+            info2.height = thresh_top - src_y;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            func_border (imp_border, &info2);
+        }
+        if (thresh_left < thresh_right)
+        {
+            info2.src_image = src_image;
+            info2.mask_image = mask_image;
+            info2.src_x = info2.mask_x = x_skip;
+            info2.src_y = info2.mask_y = 0;
+            info2.dest_x = dest_x + thresh_left - src_x;
+            info2.width = thresh_right - thresh_left;
+            info2.height = 1;
+            info2.src_flags = src_flags;
+            info2.mask_flags = mask_flags;
+            for (info2.dest_y = dest_y; info2.dest_y < dest_y + thresh_top - src_y; info2.dest_y++)
+                func (imp, &info2);
+        }
+        if (thresh_right < src_x + width)
+        {
+            src_solid.color_32 = read_bits_sample (imp, src_image, src_image->bits.width-1, 0);
+            if (mask_image)
+                mask_solid.color_32 = read_bits_sample (imp, mask_image, src_image->bits.width-1, 0);
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.dest_x = dest_x + thresh_right - src_x;
+            info2.dest_y = dest_y;
+            info2.width = src_x + width - thresh_right;
+            info2.height = thresh_top - src_y;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            func_border (imp_border, &info2);
+        }
+    }
+    if (thresh_top < thresh_bottom)
+    {
+        if (src_x < thresh_left)
+        {
+            int32_t y;
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.dest_x = dest_x;
+            info2.width = thresh_left - src_x;
+            info2.height = 1;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            for (y = 0; y < thresh_bottom - thresh_top; y++)
+            {
+                src_solid.color_32 = read_bits_sample (imp, src_image, 0, y_skip + y);
+                if (mask_image)
+                    mask_solid.color_32 = read_bits_sample (imp, mask_image, 0, y_skip + y);
+                info2.dest_y = dest_y + thresh_top - src_y + y;
+                func_border (imp_border, &info2);
+            }
+        }
+        if (thresh_left < thresh_right)
+        {
+            info2.src_image = src_image;
+            info2.mask_image = mask_image;
+            info2.src_x = info2.mask_x = x_skip;
+            info2.src_y = info2.mask_y = y_skip;
+            info2.dest_x = dest_x + thresh_left - src_x;
+            info2.dest_y = dest_y + thresh_top - src_y;
+            info2.width = thresh_right - thresh_left;
+            info2.height = thresh_bottom - thresh_top;
+            info2.src_flags = src_flags;
+            info2.mask_flags = mask_flags;
+            func (imp, &info2);
+        }
+        if (thresh_right < src_x + width)
+        {
+            int32_t y;
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.dest_x = dest_x + thresh_right - src_x;
+            info2.width = src_x + width - thresh_right;
+            info2.height = 1;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            for (y = 0; y < thresh_bottom - thresh_top; y++)
+            {
+                src_solid.color_32 = read_bits_sample (imp, src_image, src_image->bits.width-1, y_skip + y);
+                if (mask_image)
+                    mask_solid.color_32 = read_bits_sample (imp, mask_image, src_image->bits.width-1, y_skip + y);
+                info2.dest_y = dest_y + thresh_top - src_y + y;
+                func_border (imp_border, &info2);
+            }
+        }
+    }
+    if (thresh_bottom < src_y + height)
+    {
+        if (src_x < thresh_left)
+        {
+            src_solid.color_32 = read_bits_sample (imp, src_image, 0, src_image->bits.height-1);
+            if (mask_image)
+                mask_solid.color_32 = read_bits_sample (imp, mask_image, 0, src_image->bits.height-1);
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.dest_x = dest_x;
+            info2.dest_y = dest_y + thresh_bottom - src_y;
+            info2.width = thresh_left - src_x;
+            info2.height = src_y + height - thresh_bottom;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            func_border (imp_border, &info2);
+        }
+        if (thresh_left < thresh_right)
+        {
+            info2.src_image = src_image;
+            info2.mask_image = mask_image;
+            info2.src_x = info2.mask_x = x_skip;
+            info2.src_y = info2.mask_y = src_image->bits.height-1;
+            info2.dest_x = dest_x + thresh_left - src_x;
+            info2.width = thresh_right - thresh_left;
+            info2.height = 1;
+            info2.src_flags = src_flags;
+            info2.mask_flags = mask_flags;
+            for (info2.dest_y = dest_y + thresh_bottom - src_y; info2.dest_y < dest_y + height; info2.dest_y++)
+                func (imp, &info2);
+        }
+        if (thresh_right < src_x + width)
+        {
+            src_solid.color_32 = read_bits_sample (imp, src_image, src_image->bits.width-1, src_image->bits.height-1);
+            if (mask_image)
+                mask_solid.color_32 = read_bits_sample (imp, mask_image, src_image->bits.width-1, src_image->bits.height-1);
+            info2.src_image = src_image_border;
+            info2.mask_image = mask_image_border;
+            info2.dest_x = dest_x + thresh_right - src_x;
+            info2.dest_y = dest_y + thresh_bottom - src_y;
+            info2.width = src_x + width - thresh_right;
+            info2.height = src_y + height - thresh_bottom;
+            info2.src_flags = src_flags_border;
+            info2.mask_flags = mask_flags_border;
+            func_border (imp_border, &info2);
+        }
+    }
+}
+
 /* Use more unrolling for src_0565_0565 because it is typically CPU bound */
 static force_inline void
 scaled_nearest_scanline_565_565_SRC (uint16_t *       dst,
@@ -2078,6 +2369,16 @@ static const pixman_fast_path_t c_fast_paths[] =
 	PIXMAN_any, 0,
 	PIXMAN_any, FAST_PATH_STD_DEST_FLAGS,
 	fast_composite_tiled_repeat
+    },
+
+    /* Pad repeat fast path entry. */
+    {   PIXMAN_OP_any,
+        PIXMAN_any,
+        (FAST_PATH_STANDARD_FLAGS | FAST_PATH_ID_TRANSFORM | FAST_PATH_BITS_IMAGE |
+         FAST_PATH_PAD_REPEAT),
+        PIXMAN_any, 0,
+        PIXMAN_any, FAST_PATH_STD_DEST_FLAGS,
+        fast_composite_pad_repeat
     },
 
     {   PIXMAN_OP_NONE	},
