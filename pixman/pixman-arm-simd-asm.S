@@ -350,6 +350,64 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro test_zero numregs, reg1, reg2, reg3, reg4
+        teq     WK&reg1, #0
+ .if numregs >= 2
+        teqeq   WK&reg2, #0
+  .if numregs >= 3
+        teqeq   WK&reg3, #0
+   .if numregs == 4
+        teqeq   WK&reg4, #0
+   .endif
+  .endif
+ .endif
+.endm
+
+.macro add_8888_8888_2pixels  dst1, dst2
+        uqadd8  WK&dst1, WK&dst1, MASK
+        uqadd8  WK&dst2, WK&dst2, STRIDE_M
+.endm
+
+.macro add_8888_8888_1pixel  dst
+        uqadd8  WK&dst, WK&dst, MASK
+.endm
+
+.macro add_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+        pixld   , numbytes, firstreg, SRC, 0
+        add     DST, DST, #numbytes
+.endm
+
+.macro add_8888_8888_process_tail  cond, numbytes, firstreg
+        test_zero %(numbytes/4), firstreg, %(firstreg+1), %(firstreg+2), %(firstreg+3)
+        beq     01f
+ .if numbytes == 16
+        ldrd    MASK, STRIDE_M, [DST, #-16]
+        add_8888_8888_2pixels  firstreg, %(firstreg+1)
+        ldrd    MASK, STRIDE_M, [DST, #-8]
+        add_8888_8888_2pixels  %(firstreg+2), %(firstreg+3)
+ .elseif numbytes == 8
+        ldrd    MASK, STRIDE_M, [DST, #-8]
+        add_8888_8888_2pixels  firstreg, %(firstreg+1)
+ .else
+        ldr     MASK, [DST, #-4]
+        add_8888_8888_1pixel  firstreg
+ .endif
+        pixst   , numbytes, firstreg, DST
+01:
+.endm
+
+generate_composite_function \
+    pixman_composite_add_8888_8888_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_PROCESS_PRESERVES_SCRATCH | FLAG_NO_PRELOAD_DST, \
+    2, /* prefetch distance */ \
+    nop_macro, /* init */ \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    add_8888_8888_process_head, \
+    add_8888_8888_process_tail
+
+/******************************************************************************/
+
 .macro over_8888_8888_init
         /* Hold loop invariant in MASK */
         ldr     MASK, =0x00800080
