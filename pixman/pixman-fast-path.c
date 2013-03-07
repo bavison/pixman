@@ -1687,6 +1687,52 @@ fast_composite_pad_repeat (pixman_implementation_t *imp,
     }
 }
 
+static void
+fast_composite_none_repeat_mask_over (pixman_implementation_t *imp,
+                                      pixman_composite_info_t *info)
+{
+    PIXMAN_COMPOSITE_ARGS (info);
+    pixman_composite_info_t info2 = *info;
+
+    int32_t trim_left = MAX (-mask_x, -dest_x);
+    int32_t trim_right = width + MAX (mask_x - mask_image->bits.width, dest_x - dest_image->bits.width);
+    int32_t trim_top = MAX (-mask_y, -dest_y);
+    int32_t trim_bottom = height + MAX (mask_y - mask_image->bits.height, dest_y - dest_image->bits.height);
+    if (trim_left < 0)
+        trim_left = 0;
+    if (trim_right < 0)
+        trim_right = 0;
+    if (trim_top < 0)
+        trim_top = 0;
+    if (trim_bottom < 0)
+        trim_bottom = 0;
+
+    info2.width -= trim_left + trim_right;
+    info2.height -= trim_top + trim_bottom;
+    if (info2.width > 0 && info2.height > 0)
+    {
+        pixman_composite_func_t func;
+
+        info2.src_x += trim_left;
+        info2.src_y += trim_top;
+        info2.mask_x += trim_left;
+        info2.mask_y += trim_top;
+        info2.dest_x += trim_left;
+        info2.dest_y += trim_top;
+        info2.mask_flags = (info->mask_flags & ~FAST_PATH_NONE_REPEAT) |
+                FAST_PATH_SAMPLES_COVER_CLIP_NEAREST;
+
+        _pixman_implementation_lookup_composite (
+                imp->toplevel, info2.op,
+                src_image->common.extended_format_code, info2.src_flags,
+                mask_image->common.extended_format_code, info2.mask_flags,
+                dest_image->common.extended_format_code, info2.dest_flags,
+                &imp, &func);
+
+        func (imp, &info2);
+    }
+}
+
 /* Use more unrolling for src_0565_0565 because it is typically CPU bound */
 static force_inline void
 scaled_nearest_scanline_565_565_SRC (uint16_t *       dst,
@@ -2284,6 +2330,15 @@ static const pixman_fast_path_t c_fast_paths[] =
     SIMPLE_ROTATE_FAST_PATH (SRC, x8r8g8b8, x8r8g8b8, 8888),
     SIMPLE_ROTATE_FAST_PATH (SRC, r5g6b5, r5g6b5, 565),
     SIMPLE_ROTATE_FAST_PATH (SRC, a8, a8, 8),
+
+    {   PIXMAN_OP_OVER,
+        PIXMAN_solid, FAST_PATH_STANDARD_FLAGS,
+        PIXMAN_any,
+        (FAST_PATH_STANDARD_FLAGS | FAST_PATH_ID_TRANSFORM | FAST_PATH_BITS_IMAGE |
+         FAST_PATH_NONE_REPEAT),
+        PIXMAN_any, FAST_PATH_STD_DEST_FLAGS,
+        fast_composite_none_repeat_mask_over
+    },
 
     /* Simple repeat fast path entry. */
     {	PIXMAN_OP_any,
