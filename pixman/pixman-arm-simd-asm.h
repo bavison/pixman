@@ -54,6 +54,12 @@
  */
 
 /*
+ * Determine whether we space out fast paths to reduce the effect of
+ * different BTAC aliasing upon comparative profiling results
+ */
+#define PROFILING
+
+/*
  * Determine whether we put the arguments on the stack for debugging.
  */
 #undef DEBUG_PARAMS
@@ -590,6 +596,9 @@
                                    process_tail, \
                                    process_inner_loop
 
+#ifdef PROFILING
+ .p2align 9
+#endif
  .func fname
  .global fname
  /* For ELF format also set function visibility to hidden */

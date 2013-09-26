@@ -611,3 +611,6 @@ generate_composite_function \
 
 /******************************************************************************/
 
+#ifdef PROFILING
+.p2align 9
+#endif
