@@ -78,6 +78,8 @@
 .set FLAG_PROCESS_PRESERVES_SCRATCH, 64
 .set FLAG_PROCESS_PRESERVES_WK0,     0
 .set FLAG_PROCESS_CORRUPTS_WK0,      128 /* if possible, use the specified register(s) instead so WK0 can hold number of leading pixels */
+.set FLAG_PRELOAD_DST,               0
+.set FLAG_NO_PRELOAD_DST,            256
 
 /*
  * Offset into stack where mask and source pointer/stride can be accessed.
@@ -439,7 +441,7 @@
         preload_middle  src_bpp, SRC, 0
         preload_middle  mask_bpp, MASK, 0
   .endif
-  .if (dst_r_bpp > 0) && ((SUBBLOCK % 2) == 0)
+  .if (dst_r_bpp > 0) && ((SUBBLOCK % 2) == 0) && (((flags) & FLAG_NO_PRELOAD_DST) == 0)
         /* Because we know that writes are 16-byte aligned, it's relatively easy to ensure that
          * destination prefetches are 32-byte aligned. It's also the easiest channel to offset
          * preloads for, to achieve staggered prefetches for multiple channels, because there are
@@ -474,7 +476,9 @@
  .endif
         preload_trailing  src_bpp, src_bpp_shift, SRC
         preload_trailing  mask_bpp, mask_bpp_shift, MASK
+ .if ((flags) & FLAG_NO_PRELOAD_DST) == 0
         preload_trailing  dst_r_bpp, dst_bpp_shift, DST
+ .endif
         add     X, X, #(prefetch_distance+2)*pix_per_block - 128/dst_w_bpp
         /* The remainder of the line is handled identically to the medium case */
         medium_case_inner_loop_and_trailing_pixels  process_head, process_tail,, exit_label, unaligned_src, unaligned_mask
@@ -773,7 +777,9 @@ fname:
         newline
         preload_leading_step1  src_bpp, WK1, SRC
         preload_leading_step1  mask_bpp, WK2, MASK
+  .if ((flags) & FLAG_NO_PRELOAD_DST) == 0
         preload_leading_step1  dst_r_bpp, WK3, DST
+  .endif
         
         ands    WK0, DST, #15
         beq     154f
@@ -781,7 +787,9 @@ fname:
 
         preload_leading_step2  src_bpp, src_bpp_shift, WK1, SRC
         preload_leading_step2  mask_bpp, mask_bpp_shift, WK2, MASK
+  .if ((flags) & FLAG_NO_PRELOAD_DST) == 0
         preload_leading_step2  dst_r_bpp, dst_bpp_shift, WK3, DST
+  .endif
 
         leading_15bytes  process_head, process_tail
         
@@ -821,7 +829,9 @@ fname:
         newline
         preload_line 0, src_bpp, src_bpp_shift, SRC  /* in: X, corrupts: WK0-WK1 */
         preload_line 0, mask_bpp, mask_bpp_shift, MASK
+ .if ((flags) & FLAG_NO_PRELOAD_DST) == 0
         preload_line 0, dst_r_bpp, dst_bpp_shift, DST
+ .endif
         
         sub     X, X, #128/dst_w_bpp     /* simplifies inner loop termination */
         ands    WK0, DST, #15
@@ -850,7 +860,9 @@ fname:
         newline
         preload_line 1, src_bpp, src_bpp_shift, SRC  /* in: X, corrupts: WK0-WK1 */
         preload_line 1, mask_bpp, mask_bpp_shift, MASK
+ .if ((flags) & FLAG_NO_PRELOAD_DST) == 0
         preload_line 1, dst_r_bpp, dst_bpp_shift, DST
+ .endif
         
  .if dst_w_bpp == 8
         tst     DST, #3
