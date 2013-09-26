@@ -107,6 +107,20 @@
 .set PREFETCH_TYPE_NONE,       0
 .set PREFETCH_TYPE_STANDARD,   1
 
+.macro startfunc fname
+#ifdef PROFILING
+ .p2align 9
+#endif
+ .func fname
+ .global fname
+ /* For ELF format also set function visibility to hidden */
+#ifdef __ELF__
+ .hidden fname
+ .type fname, %function
+#endif
+fname:
+.endm
+
 /*
  * Definitions of macros for load/store of pixel data.
  */
@@ -596,16 +610,7 @@
                                    process_tail, \
                                    process_inner_loop
 
-#ifdef PROFILING
- .p2align 9
-#endif
- .func fname
- .global fname
- /* For ELF format also set function visibility to hidden */
-#ifdef __ELF__
- .hidden fname
- .type fname, %function
-#endif
+startfunc fname
 
 /*
  * Make some macro arguments globally visible and accessible
@@ -717,7 +722,6 @@
     SCRATCH     .req    r12
     ORIG_W      .req    r14 /* width (pixels) */
 
-fname:
         push    {r4-r11, lr}        /* save all registers */
 
         subs    Y, Y, #1
