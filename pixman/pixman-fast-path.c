@@ -1122,6 +1122,37 @@ fast_composite_over_n_1_0565 (pixman_implementation_t *imp,
     }
 }
 
+static void
+fast_composite_over_n_8888 (pixman_implementation_t *imp,
+                            pixman_composite_info_t *info)
+{
+    PIXMAN_COMPOSITE_ARGS (info);
+    uint32_t  src;
+    uint32_t *dst_line, *dst;
+    int       dst_stride;
+    int32_t   w;
+
+    src = _pixman_image_get_solid (imp, src_image, dest_image->bits.format);
+
+    if (src == 0)
+        return;
+
+    PIXMAN_IMAGE_GET_LINE (dest_image, dest_x, dest_y, uint32_t, dst_stride, dst_line, 1);
+
+    while (height--)
+    {
+        dst = dst_line;
+        dst_line += dst_stride;
+        w = width;
+
+        while (w--)
+        {
+            *dst = over (src, *dst);
+            dst++;
+        }
+    }
+}
+
 /*
  * Simple bitblt
  */
@@ -1838,9 +1869,13 @@ static const pixman_fast_path_t c_fast_paths[] =
     PIXMAN_STD_FAST_PATH (OVER, x8r8g8b8, a8, a8r8g8b8, fast_composite_over_x888_8_8888),
     PIXMAN_STD_FAST_PATH (OVER, x8b8g8r8, a8, x8b8g8r8, fast_composite_over_x888_8_8888),
     PIXMAN_STD_FAST_PATH (OVER, x8b8g8r8, a8, a8b8g8r8, fast_composite_over_x888_8_8888),
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, a8r8g8b8, fast_composite_over_n_8888),
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, x8r8g8b8, fast_composite_over_n_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8r8g8b8, null, a8r8g8b8, fast_composite_over_8888_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8r8g8b8, null, x8r8g8b8, fast_composite_over_8888_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8r8g8b8, null, r5g6b5, fast_composite_over_8888_0565),
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, a8b8g8r8, fast_composite_over_n_8888),
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, x8b8g8r8, fast_composite_over_n_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, null, a8b8g8r8, fast_composite_over_8888_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, null, x8b8g8r8, fast_composite_over_8888_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, null, b5g6r5, fast_composite_over_8888_0565),
