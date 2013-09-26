@@ -2261,3 +2261,7 @@ generate_composite_function_single_scanline \
     src_1555_8888_process_tail
 
 /******************************************************************************/
+
+#ifdef PROFILING
+.p2align 9
+#endif
