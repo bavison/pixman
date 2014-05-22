@@ -1035,6 +1035,39 @@ fast_composite_over_n_1_8888 (pixman_implementation_t *imp,
 }
 
 static void
+fast_composite_over_n_0565 (pixman_implementation_t *imp,
+                            pixman_composite_info_t *info)
+{
+    PIXMAN_COMPOSITE_ARGS (info);
+    uint32_t  src;
+    uint16_t *dst_line, *dst;
+    int       dst_stride;
+    int32_t   w;
+    uint32_t  d;
+
+    src = _pixman_image_get_solid (imp, src_image, dest_image->bits.format);
+
+    if (src == 0)
+        return;
+
+    PIXMAN_IMAGE_GET_LINE (dest_image, dest_x, dest_y, uint16_t, dst_stride, dst_line, 1);
+
+    while (height--)
+    {
+        dst = dst_line;
+        dst_line += dst_stride;
+        w = width;
+
+        while (w--)
+        {
+            d = over (src, convert_0565_to_0888 (*dst));
+            *dst = convert_8888_to_0565 (d);
+            dst++;
+        }
+    }
+}
+
+static void
 fast_composite_over_n_1_0565 (pixman_implementation_t *imp,
                               pixman_composite_info_t *info)
 {
@@ -1845,6 +1878,8 @@ FAST_SIMPLE_ROTATE (8888, uint32_t)
 
 static const pixman_fast_path_t c_fast_paths[] =
 {
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, r5g6b5, fast_composite_over_n_0565),
+    PIXMAN_STD_FAST_PATH (OVER, solid, null, b5g6r5, fast_composite_over_n_0565),
     PIXMAN_STD_FAST_PATH (OVER, solid, a8, r5g6b5, fast_composite_over_n_8_0565),
     PIXMAN_STD_FAST_PATH (OVER, solid, a8, b5g6r5, fast_composite_over_n_8_0565),
     PIXMAN_STD_FAST_PATH (OVER, solid, a8, r8g8b8, fast_composite_over_n_8_0888),
