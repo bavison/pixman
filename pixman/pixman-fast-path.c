@@ -262,6 +262,43 @@ fast_composite_in_8_8 (pixman_implementation_t *imp,
 }
 
 static void
+fast_composite_in_8888_8 (pixman_implementation_t *imp,
+                          pixman_composite_info_t *info)
+{
+    PIXMAN_COMPOSITE_ARGS (info);
+    uint8_t     *dst_line, *dst;
+    uint32_t    *src_line, *src;
+    int dst_stride, src_stride;
+    int32_t w;
+    uint8_t s;
+    uint16_t t;
+
+    PIXMAN_IMAGE_GET_LINE (src_image, src_x, src_y, uint32_t, src_stride, src_line, 1);
+    PIXMAN_IMAGE_GET_LINE (dest_image, dest_x, dest_y, uint8_t, dst_stride, dst_line, 1);
+
+    while (height--)
+    {
+        dst = dst_line;
+        dst_line += dst_stride;
+        src = src_line;
+        src_line += src_stride;
+        w = width;
+
+        while (w--)
+        {
+            s = *src++ >> 24;
+
+            if (s == 0)
+                *dst = 0;
+            else if (s != 0xff)
+                *dst = MUL_UN8 (s, *dst, t);
+
+            dst++;
+        }
+    }
+}
+
+static void
 fast_composite_over_n_8_8888 (pixman_implementation_t *imp,
                               pixman_composite_info_t *info)
 {
@@ -1948,6 +1985,9 @@ static const pixman_fast_path_t c_fast_paths[] =
     PIXMAN_STD_FAST_PATH (SRC, a1r5g5b5, null, x1r5g5b5, fast_composite_src_memcpy),
     PIXMAN_STD_FAST_PATH (SRC, a8, null, a8, fast_composite_src_memcpy),
     PIXMAN_STD_FAST_PATH (IN, a8, null, a8, fast_composite_in_8_8),
+    PIXMAN_STD_FAST_PATH (IN, a8r8g8b8, null, a8, fast_composite_in_8888_8),
+    PIXMAN_STD_FAST_PATH (IN, a8b8g8r8, null, a8, fast_composite_in_8888_8),
+    PIXMAN_STD_FAST_PATH (IN, a8r8g8b8_sRGB, null, a8, fast_composite_in_8888_8),
     PIXMAN_STD_FAST_PATH (IN, solid, a8, a8, fast_composite_in_n_8_8),
 
     SIMPLE_NEAREST_FAST_PATH (SRC, x8r8g8b8, x8r8g8b8, 8888_8888),
