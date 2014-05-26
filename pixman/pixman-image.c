@@ -438,6 +438,12 @@ compute_image_info (pixman_image_t *image)
 	    image->common.repeat != PIXMAN_REPEAT_NONE)
 	{
 	    code = PIXMAN_solid;
+	    if ((image->bits.format == PIXMAN_a8 && *(uint8_t *)image->bits.bits) == 0xFF   ||
+	        ((image->bits.format == PIXMAN_b8g8r8a8 || image->bits.format == PIXMAN_r8g8b8a8) && (0xff &~ image->bits.bits[0]) == 0) ||
+	        ((image->bits.format == PIXMAN_a8r8g8b8 || image->bits.format == PIXMAN_a8b8g8r8 || image->bits.format == PIXMAN_a8r8g8b8_sRGB) && (0xff000000 &~ image->bits.bits[0]) == 0))
+	    {
+	        flags |= FAST_PATH_SAMPLES_OPAQUE | FAST_PATH_IS_OPAQUE;
+	    }
 	}
 	else
 	{
