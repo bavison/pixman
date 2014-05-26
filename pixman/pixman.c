@@ -325,6 +325,27 @@ _pixman_compute_composite_region32 (pixman_region32_t * region,
     return TRUE;
 }
 
+static uint32_t
+check_for_single_pixel_opaque_image (pixman_image_t *image)
+{
+    if (image->type == BITS &&
+        image->common.extended_format_code == PIXMAN_solid &&
+        (image->common.flags & FAST_PATH_NO_ACCESSORS) != 0 &&
+        (((image->bits.format == PIXMAN_a8) &&
+                *(uint8_t *)image->bits.bits == 0xFF) ||
+         ((image->bits.format == PIXMAN_b8g8r8a8 || image->bits.format == PIXMAN_r8g8b8a8) &&
+                (0xff &~ image->bits.bits[0]) == 0) ||
+         ((image->bits.format == PIXMAN_a8r8g8b8 || image->bits.format == PIXMAN_a8b8g8r8 || image->bits.format == PIXMAN_a8r8g8b8_sRGB) &&
+                (0xff000000 &~ image->bits.bits[0]) == 0)) &&
+         !image->common.alpha_map &&
+         image->common.filter != PIXMAN_FILTER_CONVOLUTION &&
+         image->common.filter != PIXMAN_FILTER_SEPARABLE_CONVOLUTION &&
+         !image->common.component_alpha)
+        return FAST_PATH_SAMPLES_OPAQUE | FAST_PATH_IS_OPAQUE;
+    else
+        return 0;
+}
+
 typedef struct box_48_16 box_48_16_t;
 
 struct box_48_16
@@ -597,12 +618,13 @@ pixman_image_composite32 (pixman_op_t      op,
     _pixman_image_validate (dest);
 
     src_format = src->common.extended_format_code;
-    info.src_flags = src->common.flags;
+    info.src_flags = src->common.flags | check_for_single_pixel_opaque_image (src);
 
-    if (mask && !(mask->common.flags & FAST_PATH_IS_OPAQUE))
+    if (mask)
+        info.mask_flags = mask->common.flags | check_for_single_pixel_opaque_image (mask);
+    if (mask && !(info.mask_flags & FAST_PATH_IS_OPAQUE))
     {
 	mask_format = mask->common.extended_format_code;
-	info.mask_flags = mask->common.flags;
     }
     else
     {
