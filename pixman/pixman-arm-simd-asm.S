@@ -1772,6 +1772,120 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro over_n_0565_init
+        BITMSK5 .req    Y
+        BITMSK6 .req    STRIDE_D
+        SRCRB   .req    SRC
+        SRCG    .req    STRIDE_S
+        HALF    .req    MASK
+        ALPHA   .req    STRIDE_M
+        TMP0    .req    SCRATCH
+        TMP1    .req    ORIG_W
+        line_saved_regs  Y, STRIDE_D, ORIG_W
+        ldr     SRC, [sp, #ARGS_STACK_OFFSET]
+        mov     ALPHA, #255
+        pkhbt   SRCG, SRC, SRC, lsl #16             @ GGGGGGGGxxxxxxxxGGGGGGGGxxxxxxxx
+        sub     ALPHA, ALPHA, SRC, lsr #24
+        mov     SRCRB, SRC, lsl #8                  @ RRRRRRRRxxxxxxxxBBBBBBBBxxxxxxxx
+        ldr     HALF, =0x00800080
+.endm
+
+.macro over_n_0565_newline
+        ldr     BITMSK5, =0x001f001f
+        ldr     BITMSK6, =0xfc00fc00
+.endm
+
+.macro over_n_0565_cleanup
+        .unreq  BITMSK5
+        .unreq  BITMSK6
+        .unreq  SRCRB
+        .unreq  SRCG
+        .unreq  HALF
+        .unreq  ALPHA
+        .unreq  TMP0
+        .unreq  TMP1
+.endm
+
+.macro over_n_0565_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+        pixld   , numbytes, firstreg, DST, 0
+.endm
+
+.macro over_n_0565_1pixel dst
+        mov     TMP1, WK&dst, lsl #16               @ rrrrrggggggbbbbb0000000000000000
+        bic     TMP1, TMP1, BITMSK6, lsr #5         @ rrrrr000000bbbbb0000000000000000
+        and     TMP0, BITMSK6, WK&dst, lsl #5       @ 0000000000000000gggggg0000000000
+        orr     WK&dst, TMP1, TMP1, lsr #5          @ rrrrrrrrrr0bbbbbbbbbb00000000000
+        orr     TMP0, TMP0, lsr #6                  @ 0000000000000000gggggggggggg0000
+        pkhtb   WK&dst, WK&dst, WK&dst, asr #5      @ rrrrrrrrrr0xxxxxbbbbbbbbbb000000
+        uxtb    TMP0, TMP0, ror #8                  @ 000000000000000000000000gggggggg
+        uxtb16  WK&dst, WK&dst, ror #8              @ 00000000rrrrrrrr00000000bbbbbbbb
+        mla     TMP0, TMP0, ALPHA, HALF             @ xxxxxxxxxxxxxxxxgggggggggggggggg
+        mla     WK&dst, WK&dst, ALPHA, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        uxtab   TMP0, TMP0, TMP0, ror #8            @ xxxxxxxxxxxxxxxxgggggggggggggggg
+        uxtab16 WK&dst, WK&dst, WK&dst, ror #8      @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        uqadd8  TMP0, TMP0, SRCG                    @ xxxxxxxxxxxxxxxxggggggggxxxxxxxx
+        uqadd8  WK&dst, WK&dst, SRCRB               @ rrrrrrrrxxxxxxxxbbbbbbbbxxxxxxxx
+        and     TMP0, TMP0, BITMSK6                 @ xxxxxx0000000000gggggg0000000000
+        and     WK&dst, BITMSK5, WK&dst, lsr #11    @ 00000000000rrrrr00000000000bbbbb
+        orr     WK&dst, WK&dst, WK&dst, lsr #5      @ 00000000000xxxxxrrrrr000000bbbbb
+        orr     WK&dst, WK&dst, TMP0, lsr #5        @ 00000xxxxxxxxxxxrrrrrggggggbbbbb
+.endm
+
+.macro over_n_0565_2pixels dst
+        bic     TMP1, WK&dst, BITMSK6, lsr #5       @ RRRRR000000BBBBBrrrrr000000bbbbb
+        and     TMP0, BITMSK6, WK&dst, lsl #5       @ GGGGGG0000000000gggggg0000000000
+        mov     WK&dst, TMP1, lsl #16               @ rrrrr000000bbbbb0000000000000000
+        orr     TMP0, TMP0, lsr #6                  @ GGGGGGGGGGGG0000gggggggggggg0000
+        bic     TMP1, TMP1, WK&dst, lsr #16         @ RRRRR000000BBBBB0000000000000000
+        orr     WK&dst, WK&dst, WK&dst, lsr #5      @ rrrrrrrrrr0bbbbbbbbbb00000000000
+        orr     TMP1, TMP1, TMP1, lsr #5            @ RRRRRRRRRR0BBBBBBBBBB00000000000
+        pkhtb   WK&dst, WK&dst, WK&dst, asr #5      @ rrrrrrrrrr0xxxxxbbbbbbbbbb000000
+        pkhtb   TMP1, TMP1, TMP1, asr #5            @ RRRRRRRRRR0xxxxxBBBBBBBBBB000000
+        uxtb16  TMP0, TMP0, ror #8                  @ 00000000GGGGGGGG00000000gggggggg
+        uxtb16  WK&dst, WK&dst, ror #8              @ 00000000rrrrrrrr00000000bbbbbbbb
+        uxtb16  TMP1, TMP1, ror #8                  @ 00000000RRRRRRRR00000000BBBBBBBB
+        mla     TMP0, TMP0, ALPHA, HALF             @ GGGGGGGGGGGGGGGGgggggggggggggggg
+        mla     WK&dst, WK&dst, ALPHA, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        mla     TMP1, TMP1, ALPHA, HALF             @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
+        uxtab16 TMP0, TMP0, TMP0, ror #8            @ GGGGGGGGGGGGGGGGgggggggggggggggg
+        uxtab16 WK&dst, WK&dst, WK&dst, ror #8      @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        uxtab16 TMP1, TMP1, TMP1, ror #8            @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
+        uqadd8  TMP0, TMP0, SRCG                    @ GGGGGGGGxxxxxxxxggggggggxxxxxxxx
+        uqadd8  TMP1, TMP1, SRCRB                   @ RRRRRRRRxxxxxxxxBBBBBBBBxxxxxxxx
+        uqadd8  WK&dst, WK&dst, SRCRB               @ rrrrrrrrxxxxxxxxbbbbbbbbxxxxxxxx
+        and     TMP0, TMP0, BITMSK6                 @ GGGGGG0000000000gggggg0000000000
+        and     TMP1, BITMSK5, TMP1, lsr #11        @ 00000000000RRRRR00000000000BBBBB
+        and     WK&dst, BITMSK5, WK&dst, lsr #11    @ 00000000000rrrrr00000000000bbbbb
+        orr     TMP1, TMP1, TMP1, lsr #5            @ 00000000000xxxxxRRRRR000000BBBBB
+        orr     WK&dst, WK&dst, WK&dst, lsr #5      @ 00000000000xxxxxrrrrr000000bbbbb
+        pkhbt   TMP1, WK&dst, TMP1, LSL #16         @ RRRRR000000BBBBBrrrrr000000bbbbb
+        orr     WK&dst, TMP1, TMP0, lsr #5          @ RRRRRGGGGGGBBBBBrrrrrggggggbbbbb
+.endm
+
+.macro over_n_0565_process_tail  cond, numbytes, firstreg
+ .if numbytes == 2
+        over_n_0565_1pixel firstreg
+ .else
+  .set PROCESS_REG, firstreg
+  .rept numbytes / 4
+        over_n_0565_2pixels %(PROCESS_REG)
+   .set PROCESS_REG, PROCESS_REG+1
+  .endr
+ .endif
+.endm
+
+generate_composite_function \
+    pixman_composite_over_n_0565_asm_armv6, 0, 0, 16, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_SPILL_LINE_VARS, \
+    2, /* prefetch distance */ \
+    over_n_0565_init, \
+    over_n_0565_newline, \
+    over_n_0565_cleanup, \
+    over_n_0565_process_head, \
+    over_n_0565_process_tail
+
+/******************************************************************************/
+
 .macro add_8888_8888_8888_init
         /* Set GE[3:0] to 0101 so SEL instructions do what we want */
         msr     CPSR_s, #0x50000
