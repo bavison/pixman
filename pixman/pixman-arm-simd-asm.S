@@ -1291,3 +1291,114 @@ generate_composite_function \
     over_n_0565_process_tail
 
 /******************************************************************************/
+
+.macro in_8888_8_init
+        SRC0    .req   Y
+        SRC1    .req   STRIDE_D
+        SRC2    .req   STRIDE_S
+        SRC3    .req   MASK
+        HALF    .req   STRIDE_M
+        TMP     .req   ORIG_W
+        line_saved_regs  Y, STRIDE_D, STRIDE_S, ORIG_W
+        ldr     SCRATCH, =0x00800080
+        mov     HALF, #0x80
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        uadd8   SCRATCH, SCRATCH, SCRATCH
+        /* Offset the source pointer: we only need the alpha bytes */
+        add     SRC, SRC, #3
+.endm
+
+.macro in_8888_8_cleanup
+        .unreq  SRC0
+        .unreq  SRC1
+        .unreq  SRC2
+        .unreq  SRC3
+        .unreq  HALF
+        .unreq  TMP
+.endm
+
+.macro in_8888_8_4pixels_head dst
+        ldr     TMP, [DST], #4
+        ldrb    SRC0, [SRC], #12
+        ldrb    SRC3, [SRC], #-4
+        ldrb    SRC2, [SRC], #-4
+        uxtb16  WK&dst, TMP
+        uxtb16  TMP, TMP, ror #8
+        ldrb    SRC1, [SRC], #12
+        smlabb  SRC0, SRC0, WK&dst, HALF
+        smlabt  SRC3, SRC3, TMP, HALF
+        smlabt  SRC2, SRC2, WK&dst, HALF
+        smlabb  SRC1, SRC1, TMP, HALF
+        orr     WK&dst, SRC0, SRC2, lsl #16
+        /* There'd be a stall here if immediately followed by orr, so
+         * fill it with something like a preload if possible */
+.endm
+
+.macro in_8888_8_4pixels_tail dst
+        orr     TMP, SRC1, SRC3, lsl #16
+        uxtab16 WK&dst, WK&dst, WK&dst, ror #8
+        uxtab16 TMP, TMP, TMP, ror #8
+        mov     WK&dst, WK&dst, ror #8
+        sel     WK&dst, WK&dst, TMP
+.endm
+
+.macro in_8888_8_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 1
+        ldrb    WK3, [DST], #1
+        ldrb    SRC0, [SRC], #4
+ .elseif numbytes == 2
+        ldrb    WK3, [DST], #1
+        ldrb    SRC0, [SRC], #4
+        ldrb    TMP, [DST], #1
+        ldrb    SRC1, [SRC], #4
+ .else
+  .if numbytes >= 8
+   .if numbytes == 16
+        in_8888_8_4pixels_head 0
+        in_8888_8_4pixels_tail 0
+        in_8888_8_4pixels_head 1
+    .if preload
+        PF  bic,    SCRATCH, SRC, #31
+        PF  pld,    [SCRATCH, #32*prefetch_distance]
+    .endif
+        in_8888_8_4pixels_tail 1
+   .endif
+        in_8888_8_4pixels_head 2
+        in_8888_8_4pixels_tail 2
+  .endif
+        in_8888_8_4pixels_head 3
+ .endif
+.endm
+
+.macro in_8888_8_process_tail  cond, numbytes, firstreg
+ .if numbytes == 1
+        smlabb  WK3, SRC0, WK3, HALF
+        add     WK3, WK3, WK3, lsr #8
+        mov     WK3, WK3, lsr #8
+        strb    WK3, [DST, #-1]
+ .elseif numbytes == 2
+        smlabb  WK3, SRC0, WK3, HALF
+        smlabb  TMP, SRC1, TMP, HALF
+        add     WK3, WK3, WK3, lsr #8
+        add     TMP, TMP, TMP, lsr #8
+        mov     WK3, WK3, lsr #8
+        mov     TMP, TMP, lsr #8
+        strb    WK3, [DST, #-2]
+        strb    TMP, [DST, #-1]
+ .else
+        in_8888_8_4pixels_tail 3
+        pixst   , numbytes, (4-numbytes/4), DST
+ .endif
+.endm
+
+generate_composite_function \
+    pixman_composite_in_8888_8_asm_armv6, 32, 0, 8, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS, \
+    3, /* prefetch distance */ \
+    in_8888_8_init, \
+    nop_macro, /* newline */ \
+    in_8888_8_cleanup, \
+    in_8888_8_process_head, \
+    in_8888_8_process_tail
+
+/******************************************************************************/
