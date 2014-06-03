@@ -1402,3 +1402,184 @@ generate_composite_function \
     in_8888_8_process_tail
 
 /******************************************************************************/
+
+.macro over_8888_8_0565_init
+        .unreq  WK2
+        .unreq  WK3
+        HALF    .req    Y
+        WK2     .req    STRIDE_D
+        WK3     .req    STRIDE_S
+        WK4     .req    STRIDE_M
+        WK5     .req    SCRATCH
+        WK6     .req    ORIG_W
+        WK7     .req    r10
+        WK8     .req    r11
+        BITMSK5 .req    WK7
+        BITMSK6 .req    WK8
+        line_saved_regs  Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro over_8888_8_0565_newline
+        ldr     HALF, =0x00800080
+        ldr     BITMSK5, =0x001f001f
+        ldr     BITMSK6, =0xfc00fc00
+.endm
+
+.macro over_8888_8_0565_cleanup
+        .unreq  HALF
+        .unreq  WK2
+        .unreq  WK3
+        .unreq  WK4
+        .unreq  WK5
+        .unreq  WK6
+        .unreq  WK7
+        .unreq  WK8
+        .unreq  BITMSK5
+        .unreq  BITMSK6
+        WK2     .req    r10
+        WK3     .req    r11
+.endm
+
+.macro over_8888_8_0565_2pixels_head
+        ldmia   SRC!, {WK0, WK1}
+        ldrb    WK2, [MASK], #1
+        ldrb    WK3, [MASK], #1
+        @ Because we'll be writing the destination in sub-cacheline
+        @ chunks either way, it needs to be preloaded, so there's no
+        @ penalty in loading its existing value even if it's unused
+        ldr     WK4, [DST], #4
+.endm
+
+.set COUNTER, 0
+
+.macro over_8888_8_0565_2pixels_tail
+        uxtb16  WK5, WK0                    @ 00000000rrrrrrrr00000000bbbbbbbb
+        uxtb16  WK0, WK0, ror #8            @ 00000000aaaaaaaa00000000gggggggg
+        uxtb16  WK6, WK1                    @ 00000000RRRRRRRR00000000BBBBBBBB
+        uxtb16  WK1, WK1, ror #8            @ 00000000AAAAAAAA00000000GGGGGGGG
+        mla     WK5, WK5, WK2, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        mla     WK0, WK0, WK2, HALF         @ aaaaaaaaaaaaaaaagggggggggggggggg
+        mla     WK6, WK6, WK3, HALF         @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
+        mla     WK1, WK1, WK3, HALF         @ AAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGG
+        uxtab16 WK5, WK5, WK5, ror #8
+        uxtab16 WK0, WK0, WK0, ror #8
+        uxtab16 WK6, WK6, WK6, ror #8
+        uxtab16 WK1, WK1, WK1, ror #8
+        mov     WK3, #0xFF
+        eor     WK2, WK3, WK0, lsr #24      @ 000000000000000000000000aaaaaaaa
+        eors    WK3, WK3, WK1, lsr #24      @ 000000000000000000000000AAAAAAAA
+        pkhbt   WK0, WK0, WK1, lsl #16      @ GGGGGGGGGGGGGGGGgggggggggggggggg
+        it      eq
+        teqeq   WK2, #0
+        beq     1f  @ skip processing of existing dest buffer if both pixels opaque
+        bic     WK1, WK4, BITMSK6, lsr #5   @ RRRRR000000BBBBBrrrrr000000bbbbb
+        and     WK7, BITMSK6, WK4, lsl #5   @ GGGGGG0000000000gggggg0000000000
+        mov     WK4, WK1, lsl #16           @ rrrrr000000bbbbb0000000000000000
+        orr     WK7, WK7, WK7, lsr #6       @ GGGGGGGGGGGG0000gggggggggggg0000
+        bic     WK1, WK1, WK4, lsr #16      @ RRRRR000000BBBBB0000000000000000
+        orr     WK4, WK4, WK4, lsr #5       @ rrrrrrrrrr0bbbbbbbbbb00000000000
+        orr     WK1, WK1, WK1, lsr #5       @ RRRRRRRRRR0BBBBBBBBBB00000000000
+        pkhtb   WK4, WK4, WK4, asr #5       @ rrrrrrrrrr0xxxxxbbbbbbbbbb000000
+        pkhtb   WK1, WK1, WK1, asr #5       @ RRRRRRRRRR0xxxxxBBBBBBBBBB000000
+        uxtb16  WK7, WK7, ror #8            @ 00000000GGGGGGGG00000000gggggggg
+        uxtb16  WK4, WK4, ror #8            @ 00000000rrrrrrrr00000000bbbbbbbb
+        uxtb16  WK1, WK1, ror #8            @ 00000000RRRRRRRR00000000BBBBBBBB
+        smlabb  WK8, WK7, WK2, HALF         @ 00000000x0000000gggggggggggggggg
+        smlatb  WK7, WK7, WK3, HALF         @ 00000000x0000000GGGGGGGGGGGGGGGG
+        mla     WK4, WK4, WK2, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        mla     WK1, WK1, WK3, HALF         @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
+        pkhbt   WK3, WK8, WK7, lsl #16      @ GGGGGGGGGGGGGGGGgggggggggggggggg
+        ldr     BITMSK5, =0x001f001f
+        ldr     BITMSK6, =0xfc00fc00
+ .if COUNTER == 16
+  .set COUNTER, 0
+        b       0f
+        .ltorg
+0:
+ .else
+  .set COUNTER, COUNTER + 1
+ .endif
+        uxtab16 WK4, WK4, WK4, ror #8
+        uxtab16 WK1, WK1, WK1, ror #8
+        uxtab16 WK3, WK3, WK3, ror #8
+        @ We could have used 16-bit saturating adds here for greater
+        @ precision, but then it wouldn't be binary identical to the C version
+        uqadd8  WK5, WK4, WK5               @ rrrrrrrrxxxxxxxxbbbbbbbbxxxxxxxx
+        uqadd8  WK6, WK1, WK6               @ RRRRRRRRxxxxxxxxBBBBBBBBxxxxxxxx
+        uqadd8  WK0, WK3, WK0               @ GGGGGGGGxxxxxxxxggggggggxxxxxxxx
+1:      and     WK5, BITMSK5, WK5, lsr #11  @ 00000000000rrrrr00000000000bbbbb
+        and     WK6, BITMSK5, WK6, lsr #11  @ 00000000000RRRRR00000000000BBBBB
+        orr     WK5, WK5, WK5, lsr #5       @ 00000000000xxxxxrrrrr000000bbbbb
+        orr     WK6, WK6, WK6, lsr #5       @ 00000000000xxxxxRRRRR000000BBBBB
+        and     WK0, BITMSK6, WK0           @ GGGGGG0000000000gggggg0000000000
+        pkhbt   WK3, WK5, WK6, lsl #16      @ RRRRR000000BBBBBrrrrr000000bbbbb
+        orr     WK0, WK3, WK0, lsr #5       @ RRRRRGGGGGGBBBBBrrrrrggggggbbbbb
+        str     WK0, [DST, #-4]
+.endm
+
+.macro over_8888_8_0565_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 2
+        ldr     WK0, [SRC], #4
+        ldrb    WK1, [MASK], #1
+        ldrh    WK2, [DST], #2
+ .else
+  .if numbytes >= 8
+   .if numbytes == 16
+        over_8888_8_0565_2pixels_head
+        over_8888_8_0565_2pixels_tail
+        over_8888_8_0565_2pixels_head
+        over_8888_8_0565_2pixels_tail
+   .endif
+        over_8888_8_0565_2pixels_head
+        over_8888_8_0565_2pixels_tail
+  .endif
+        over_8888_8_0565_2pixels_head
+ .endif
+.endm
+
+.macro over_8888_8_0565_process_tail  cond, numbytes, firstreg
+ .if numbytes == 2
+        uxtb16  WK3, WK0                    @ 00000000rrrrrrrr00000000bbbbbbbb
+        uxtb16  WK0, WK0, ror #8            @ 00000000aaaaaaaa00000000gggggggg
+        mla     WK3, WK3, WK1, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        mla     WK0, WK0, WK1, HALF         @ aaaaaaaaaaaaaaaagggggggggggggggg
+        mov     WK1, #0xFF
+        uxtab16 WK3, WK3, WK3, ror #8
+        uxtab16 WK0, WK0, WK0, ror #8
+        eors    WK1, WK1, WK0, lsr #24      @ 000000000000000000000000aaaaaaaa
+        beq     1f  @ skip processing of existing dest buffer if pixel opaque
+        bic     WK4, WK2, BITMSK6, lsr #5   @ 0000000000000000rrrrr000000bbbbb
+        and     WK2, BITMSK6, WK2, lsl #5   @ 0000000000000000gggggg0000000000
+        mov     WK4, WK4, lsl #16           @ rrrrr000000bbbbb0000000000000000
+        orr     WK4, WK4, WK4, lsr #5       @ rrrrrrrrrr0bbbbbbbbbb00000000000
+        pkhtb   WK4, WK4, WK4, asr #5       @ rrrrrrrrrr0xxxxxbbbbbbbbbb000000
+        orr     WK2, WK2, WK2, lsr #6       @ 0000000000000000gggggggggggg0000
+        uxtb16  WK4, WK4, ror #8            @ 00000000rrrrrrrr00000000bbbbbbbb
+        uxtb    WK2, WK2, ror #8            @ 000000000000000000000000gggggggg
+        mla     WK4, WK4, WK1, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
+        smlabb  WK2, WK2, WK1, HALF         @ 00000000x0000000gggggggggggggggg
+        uxtab16 WK4, WK4, WK4, ror #8
+        uxtab   WK2, WK2, WK2, ror #8
+        uqadd8  WK3, WK4, WK3               @ rrrrrrrrxxxxxxxxbbbbbbbbxxxxxxxx
+        uqadd8  WK0, WK2, WK0               @ xxxxxxxxxxxxxxxxggggggggxxxxxxxx
+1:      and     WK3, BITMSK5, WK3, lsr #11  @ 00000000000rrrrr00000000000bbbbb
+        and     WK0, BITMSK6, WK0           @ xxxxxx0000000000gggggg0000000000
+        orr     WK3, WK3, WK3, lsr #5       @ 00000000000xxxxxrrrrr000000bbbbb
+        orr     WK0, WK3, WK0, lsr #5       @ 000000xxxxxxxxxxrrrrrggggggbbbbb
+        strh    WK0, [DST, #-2]
+ .else
+        over_8888_8_0565_2pixels_tail
+ .endif
+.endm
+
+generate_composite_function \
+    pixman_composite_over_8888_8_0565_asm_armv6, 32, 8, 16, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_8888_8_0565_init, \
+    over_8888_8_0565_newline, \
+    over_8888_8_0565_cleanup, \
+    over_8888_8_0565_process_head, \
+    over_8888_8_0565_process_tail
+
+/******************************************************************************/
