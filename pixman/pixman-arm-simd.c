@@ -62,6 +62,8 @@ PIXMAN_ARM_BIND_FAST_PATH_N_DST (0, armv6, over_reverse_n_8888,
 
 PIXMAN_ARM_BIND_FAST_PATH_SRC_N_DST (SKIP_ZERO_MASK, armv6, over_8888_n_8888,
                                      uint32_t, 1, uint32_t, 1)
+PIXMAN_ARM_BIND_FAST_PATH_SRC_N_DST (SKIP_ZERO_MASK, armv6, over_8888_n_0565,
+                                     uint32_t, 1, uint16_t, 1)
 
 PIXMAN_ARM_BIND_FAST_PATH_N_MASK_DST (SKIP_ZERO_SRC, armv6, over_n_8_8888,
                                       uint8_t, 1, uint32_t, 1)
@@ -250,6 +252,8 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
     PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, solid, x8b8g8r8, armv6_composite_over_8888_n_8888),
     PIXMAN_STD_FAST_PATH (OVER, a8r8g8b8, a8, r5g6b5, armv6_composite_over_8888_8_0565),
     PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, a8, b5g6r5, armv6_composite_over_8888_8_0565),
+    PIXMAN_STD_FAST_PATH (OVER, a8r8g8b8, solid, r5g6b5, armv6_composite_over_8888_n_0565),
+    PIXMAN_STD_FAST_PATH (OVER, a8b8g8r8, solid, b5g6r5, armv6_composite_over_8888_n_0565),
 
     PIXMAN_STD_FAST_PATH (OVER, solid, null, a8r8g8b8, armv6_composite_over_n_8888),
     PIXMAN_STD_FAST_PATH (OVER, solid, null, x8r8g8b8, armv6_composite_over_n_8888),

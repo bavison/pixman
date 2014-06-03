@@ -1403,7 +1403,7 @@ generate_composite_function \
 
 /******************************************************************************/
 
-.macro over_8888_8_0565_init
+.macro over_8888_x_0565_init
         .unreq  WK2
         .unreq  WK3
         HALF    .req    Y
@@ -1419,13 +1419,13 @@ generate_composite_function \
         line_saved_regs  Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
 .endm
 
-.macro over_8888_8_0565_newline
+.macro over_8888_x_0565_newline
         ldr     HALF, =0x00800080
         ldr     BITMSK5, =0x001f001f
         ldr     BITMSK6, =0xfc00fc00
 .endm
 
-.macro over_8888_8_0565_cleanup
+.macro over_8888_x_0565_cleanup
         .unreq  HALF
         .unreq  WK2
         .unreq  WK3
@@ -1440,10 +1440,14 @@ generate_composite_function \
         WK3     .req    r11
 .endm
 
-.macro over_8888_8_0565_2pixels_head
+.macro over_8888_x_0565_2pixels_head
         ldmia   SRC!, {WK0, WK1}
+ .if OVER_8888_X_0565_SOLID
+        ldrb    WK2, [sp, #ARGS_STACK_OFFSET + 8 + 3]
+ .else
         ldrb    WK2, [MASK], #1
         ldrb    WK3, [MASK], #1
+ .endif
         @ Because we'll be writing the destination in sub-cacheline
         @ chunks either way, it needs to be preloaded, so there's no
         @ penalty in loading its existing value even if it's unused
@@ -1452,15 +1456,20 @@ generate_composite_function \
 
 .set COUNTER, 0
 
-.macro over_8888_8_0565_2pixels_tail
+.macro over_8888_x_0565_2pixels_tail
         uxtb16  WK5, WK0                    @ 00000000rrrrrrrr00000000bbbbbbbb
         uxtb16  WK0, WK0, ror #8            @ 00000000aaaaaaaa00000000gggggggg
         uxtb16  WK6, WK1                    @ 00000000RRRRRRRR00000000BBBBBBBB
         uxtb16  WK1, WK1, ror #8            @ 00000000AAAAAAAA00000000GGGGGGGG
         mla     WK5, WK5, WK2, HALF         @ rrrrrrrrrrrrrrrrbbbbbbbbbbbbbbbb
         mla     WK0, WK0, WK2, HALF         @ aaaaaaaaaaaaaaaagggggggggggggggg
+ .if OVER_8888_X_0565_SOLID
+        mla     WK6, WK6, WK2, HALF         @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
+        mla     WK1, WK1, WK2, HALF         @ AAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGG
+ .else
         mla     WK6, WK6, WK3, HALF         @ RRRRRRRRRRRRRRRRBBBBBBBBBBBBBBBB
         mla     WK1, WK1, WK3, HALF         @ AAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGG
+ .endif
         uxtab16 WK5, WK5, WK5, ror #8
         uxtab16 WK0, WK0, WK0, ror #8
         uxtab16 WK6, WK6, WK6, ror #8
@@ -1517,27 +1526,31 @@ generate_composite_function \
         str     WK0, [DST, #-4]
 .endm
 
-.macro over_8888_8_0565_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+.macro over_8888_x_0565_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
  .if numbytes == 2
         ldr     WK0, [SRC], #4
+  .if OVER_8888_X_0565_SOLID
+        ldrb    WK1, [sp, #ARGS_STACK_OFFSET + 8 + 3]
+  .else
         ldrb    WK1, [MASK], #1
+  .endif
         ldrh    WK2, [DST], #2
  .else
   .if numbytes >= 8
    .if numbytes == 16
-        over_8888_8_0565_2pixels_head
-        over_8888_8_0565_2pixels_tail
-        over_8888_8_0565_2pixels_head
-        over_8888_8_0565_2pixels_tail
+        over_8888_x_0565_2pixels_head
+        over_8888_x_0565_2pixels_tail
+        over_8888_x_0565_2pixels_head
+        over_8888_x_0565_2pixels_tail
    .endif
-        over_8888_8_0565_2pixels_head
-        over_8888_8_0565_2pixels_tail
+        over_8888_x_0565_2pixels_head
+        over_8888_x_0565_2pixels_tail
   .endif
-        over_8888_8_0565_2pixels_head
+        over_8888_x_0565_2pixels_head
  .endif
 .endm
 
-.macro over_8888_8_0565_process_tail  cond, numbytes, firstreg
+.macro over_8888_x_0565_process_tail  cond, numbytes, firstreg
  .if numbytes == 2
         uxtb16  WK3, WK0                    @ 00000000rrrrrrrr00000000bbbbbbbb
         uxtb16  WK0, WK0, ror #8            @ 00000000aaaaaaaa00000000gggggggg
@@ -1568,18 +1581,34 @@ generate_composite_function \
         orr     WK0, WK3, WK0, lsr #5       @ 000000xxxxxxxxxxrrrrrggggggbbbbb
         strh    WK0, [DST, #-2]
  .else
-        over_8888_8_0565_2pixels_tail
+        over_8888_x_0565_2pixels_tail
  .endif
 .endm
+
+.set OVER_8888_X_0565_SOLID, 0
 
 generate_composite_function \
     pixman_composite_over_8888_8_0565_asm_armv6, 32, 8, 16, \
     FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
     2, /* prefetch distance */ \
-    over_8888_8_0565_init, \
-    over_8888_8_0565_newline, \
-    over_8888_8_0565_cleanup, \
-    over_8888_8_0565_process_head, \
-    over_8888_8_0565_process_tail
+    over_8888_x_0565_init, \
+    over_8888_x_0565_newline, \
+    over_8888_x_0565_cleanup, \
+    over_8888_x_0565_process_head, \
+    over_8888_x_0565_process_tail
+
+/******************************************************************************/
+
+.set OVER_8888_X_0565_SOLID, 1
+
+generate_composite_function \
+    pixman_composite_over_8888_n_0565_asm_armv6, 32, 0, 16, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_8888_x_0565_init, \
+    over_8888_x_0565_newline, \
+    over_8888_x_0565_cleanup, \
+    over_8888_x_0565_process_head, \
+    over_8888_x_0565_process_tail
 
 /******************************************************************************/
