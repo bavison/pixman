@@ -445,36 +445,9 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
     { PIXMAN_OP_NONE },
 };
 
-#define BIND_COMBINE_U(name)                                             \
-void                                                                     \
-pixman_composite_scanline_##name##_mask_asm_neon (int32_t         w,     \
-                                                  const uint32_t *dst,   \
-                                                  const uint32_t *src,   \
-                                                  const uint32_t *mask); \
-                                                                         \
-void                                                                     \
-pixman_composite_scanline_##name##_asm_neon (int32_t         w,          \
-                                             const uint32_t *dst,        \
-                                             const uint32_t *src);       \
-                                                                         \
-static void                                                              \
-neon_combine_##name##_u (pixman_implementation_t *imp,                   \
-                         pixman_op_t              op,                    \
-                         uint32_t *               dest,                  \
-                         const uint32_t *         src,                   \
-                         const uint32_t *         mask,                  \
-                         int                      width)                 \
-{                                                                        \
-    if (mask)                                                            \
-	pixman_composite_scanline_##name##_mask_asm_neon (width, dest,   \
-	                                                  src, mask);    \
-    else                                                                 \
-	pixman_composite_scanline_##name##_asm_neon (width, dest, src);  \
-}
-
-BIND_COMBINE_U (over)
-BIND_COMBINE_U (add)
-BIND_COMBINE_U (out_reverse)
+PIXMAN_ARM_BIND_COMBINE_U (neon, over)
+PIXMAN_ARM_BIND_COMBINE_U (neon, add)
+PIXMAN_ARM_BIND_COMBINE_U (neon, out_reverse)
 
 pixman_implementation_t *
 _pixman_implementation_create_arm_neon (pixman_implementation_t *fallback)
