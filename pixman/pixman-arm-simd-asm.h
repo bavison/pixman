@@ -547,6 +547,11 @@
 
 
 .macro end_of_line      restore_x, vars_spilled, loop_label, last_one
+ .if SINGLE_SCANLINE
+  .ifc "last_one",""
+        b       198f
+  .endif
+ .else
  .if vars_spilled
         /* Sadly, GAS doesn't seem have an equivalent of the DCI directive? */
         /* This is ldmia sp,{} */
@@ -580,21 +585,22 @@
         b       198f
   .endif
  .endif
+ .endif
 .endm
 
 
-.macro generate_composite_function fname, \
-                                   src_bpp_, \
-                                   mask_bpp_, \
-                                   dst_w_bpp_, \
-                                   flags_, \
-                                   prefetch_distance_, \
-                                   init, \
-                                   newline, \
-                                   cleanup, \
-                                   process_head, \
-                                   process_tail, \
-                                   process_inner_loop
+.macro generate_composite_function_common fname, \
+                                          src_bpp_, \
+                                          mask_bpp_, \
+                                          dst_w_bpp_, \
+                                          flags_, \
+                                          prefetch_distance_, \
+                                          init, \
+                                          newline, \
+                                          cleanup, \
+                                          process_head, \
+                                          process_tail, \
+                                          process_inner_loop
 
     pixman_asm_function fname
 
@@ -688,12 +694,28 @@
  * The following arguments are unused for non-mask operations
  * [sp,#8] = mask pixel value, or pointer to top-left pixel of mask
  * [sp,#12] = 0 or mask stride (pixels)
+ *
+ * or in the single-scanline case:
+ * r0 = width (pixels)
+ * r1 = pointer to top-left pixel of destination
+ * r2 = pointer to top-left pixel of source
+ * The following argument is unused for non-mask operations
+ * r3 = pointer to top-left pixel of mask
  */
 
 /*
  * Assign symbolic names to registers
  */
     X           .req    r0  /* pixels to go on this line */
+ .if SINGLE_SCANLINE
+    DST         .req    r1  /* destination pixel pointer */
+    SRC         .req    r2  /* source pixel pointer */
+    MASK        .req    r3  /* mask pixel pointer (if applicable) */
+    Y           .req    r4  /* temporary */
+    STRIDE_D    .req    r5  /* temporary */
+    STRIDE_S    .req    r6  /* temporary */
+    STRIDE_M    .req    r7  /* temporary */
+ .else
     Y           .req    r1  /* lines to go */
     DST         .req    r2  /* destination pixel pointer */
     STRIDE_D    .req    r3  /* destination stride (bytes, minus width) */
@@ -701,6 +723,7 @@
     STRIDE_S    .req    r5  /* source stride (bytes, minus width) */
     MASK        .req    r6  /* mask pixel pointer (if applicable) */
     STRIDE_M    .req    r7  /* mask stride (bytes, minus width) */
+ .endif
     WK0         .req    r8  /* pixel data registers */
     WK1         .req    r9
     WK2         .req    r10
@@ -710,13 +733,16 @@
 
         push    {r4-r11, lr}        /* save all registers */
 
+ .if !SINGLE_SCANLINE
         subs    Y, Y, #1
         blo     199f
+ .endif
 
 #ifdef DEBUG_PARAMS
         sub     sp, sp, #9*4
 #endif
 
+ .if !SINGLE_SCANLINE
  .if src_bpp > 0
         ldr     SRC, [sp, #ARGS_STACK_OFFSET]
         ldr     STRIDE_S, [sp, #ARGS_STACK_OFFSET+4]
@@ -724,6 +750,7 @@
  .if mask_bpp > 0
         ldr     MASK, [sp, #ARGS_STACK_OFFSET+8]
         ldr     STRIDE_M, [sp, #ARGS_STACK_OFFSET+12]
+ .endif
  .endif
         
 #ifdef DEBUG_PARAMS
@@ -741,6 +768,7 @@
   .set LOCALS_STACK_OFFSET, LOCALS_STACK_OFFSET+4
  .endif
         
+ .if !SINGLE_SCANLINE
         lsl     STRIDE_D, #dst_bpp_shift /* stride in bytes */
         sub     STRIDE_D, STRIDE_D, X, lsl #dst_bpp_shift
  .if src_bpp > 0
@@ -750,6 +778,7 @@
  .if mask_bpp > 0
         lsl     STRIDE_M, #mask_bpp_shift
         sub     STRIDE_M, STRIDE_M, X, lsl #mask_bpp_shift
+ .endif
  .endif
  
         /* Are we not even wide enough to have one 16-byte aligned 16-byte block write? */
@@ -765,12 +794,14 @@
          * inner loop termination. We want it to stop when there are
          * (prefetch_distance+1) complete blocks to go. */
         sub     X, X, #(prefetch_distance+2)*pix_per_block
+  .if !SINGLE_SCANLINE
         mov     ORIG_W, X
   .if (flags) & FLAG_SPILL_LINE_VARS_WIDE
         /* This is stmdb sp!,{} */
         .word   0xE92D0000 | LINE_SAVED_REGS
    .set ARGS_STACK_OFFSET, ARGS_STACK_OFFSET + LINE_SAVED_REG_COUNT*4
    .set LOCALS_STACK_OFFSET, LOCALS_STACK_OFFSET + LINE_SAVED_REG_COUNT*4
+  .endif
   .endif
 151:    /* New line */
         newline
@@ -808,7 +839,7 @@
 
 157:    /* Check for another line */
         end_of_line 1, %((flags) & FLAG_SPILL_LINE_VARS_WIDE), 151b
-  .if (flags) & FLAG_SPILL_LINE_VARS_WIDE
+  .if (!SINGLE_SCANLINE) && ((flags) & FLAG_SPILL_LINE_VARS_WIDE)
    .set ARGS_STACK_OFFSET, ARGS_STACK_OFFSET - LINE_SAVED_REG_COUNT*4
    .set LOCALS_STACK_OFFSET, LOCALS_STACK_OFFSET - LINE_SAVED_REG_COUNT*4
   .endif
@@ -817,12 +848,14 @@
  .ltorg
 
 160:    /* Medium case */
+ .if !SINGLE_SCANLINE
         mov     ORIG_W, X
  .if (flags) & FLAG_SPILL_LINE_VARS_NON_WIDE
         /* This is stmdb sp!,{} */
         .word   0xE92D0000 | LINE_SAVED_REGS
   .set ARGS_STACK_OFFSET, ARGS_STACK_OFFSET + LINE_SAVED_REG_COUNT*4
   .set LOCALS_STACK_OFFSET, LOCALS_STACK_OFFSET + LINE_SAVED_REG_COUNT*4
+ .endif
  .endif
 161:    /* New line */
         newline
@@ -848,12 +881,14 @@
  .ltorg
 
 170:    /* Narrow case, less than 31 bytes, so no guarantee of at least one 16-byte block */
+ .if !SINGLE_SCANLINE
  .if dst_w_bpp < 32
         mov     ORIG_W, X
  .endif
  .if (flags) & FLAG_SPILL_LINE_VARS_NON_WIDE
         /* This is stmdb sp!,{} */
         .word   0xE92D0000 | LINE_SAVED_REGS
+ .endif
  .endif
 171:    /* New line */
         newline
@@ -892,13 +927,13 @@
 
 177:    /* Check for another line */
         end_of_line %(dst_w_bpp < 32), %((flags) & FLAG_SPILL_LINE_VARS_NON_WIDE), 171b, last_one
- .if (flags) & FLAG_SPILL_LINE_VARS_NON_WIDE
+ .if (!SINGLE_SCANLINE) && ((flags) & FLAG_SPILL_LINE_VARS_NON_WIDE)
   .set ARGS_STACK_OFFSET, ARGS_STACK_OFFSET - LINE_SAVED_REG_COUNT*4
   .set LOCALS_STACK_OFFSET, LOCALS_STACK_OFFSET - LINE_SAVED_REG_COUNT*4
  .endif
 
 197:
- .if (flags) & FLAG_SPILL_LINE_VARS
+ .if (!SINGLE_SCANLINE) && ((flags) & FLAG_SPILL_LINE_VARS)
         add     sp, sp, #LINE_SAVED_REG_COUNT*4
  .endif
 198:
@@ -935,6 +970,42 @@
     .endfunc
 .endm
 
+.macro generate_composite_function fname, \
+                                   src_bpp_, \
+                                   mask_bpp_, \
+                                   dst_w_bpp_, \
+                                   flags_, \
+                                   prefetch_distance_, \
+                                   init, \
+                                   newline, \
+                                   cleanup, \
+                                   process_head, \
+                                   process_tail, \
+                                   process_inner_loop
+ .set SINGLE_SCANLINE, 0
+generate_composite_function_common \
+    fname, src_bpp_, mask_bpp_, dst_w_bpp_, flags_, prefetch_distance_, \
+    init, newline, cleanup, process_head, process_tail, process_inner_loop
+.endm
+
+.macro generate_composite_function_single_scanline fname, \
+                                                   src_bpp_, \
+                                                   mask_bpp_, \
+                                                   dst_w_bpp_, \
+                                                   flags_, \
+                                                   prefetch_distance_, \
+                                                   init, \
+                                                   newline, \
+                                                   cleanup, \
+                                                   process_head, \
+                                                   process_tail, \
+                                                   process_inner_loop
+ .set SINGLE_SCANLINE, 1
+generate_composite_function_common \
+    fname, src_bpp_, mask_bpp_, dst_w_bpp_, flags_, prefetch_distance_, \
+    init, newline, cleanup, process_head, process_tail, process_inner_loop
+.endm
+
 .macro line_saved_regs  x:vararg
  .set LINE_SAVED_REGS, 0
  .set LINE_SAVED_REG_COUNT, 0
@@ -960,6 +1031,9 @@
    .set LINE_SAVED_REG_COUNT, LINE_SAVED_REG_COUNT + 1
   .endif
  .endr
+ .if SINGLE_SCANLINE
+  .set LINE_SAVED_REG_COUNT, 0
+ .endif
 .endm
 
 .macro nop_macro x:vararg
