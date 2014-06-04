@@ -424,5 +424,33 @@ FAST_BILINEAR_MAINLOOP_COMMON (cputype##_##name##_normal_##op,                \
                        src_type, uint8_t, dst_type, NORMAL,                   \
                        FLAG_HAVE_NON_SOLID_MASK)
 
+/*****************************************************************************/
+
+#define PIXMAN_ARM_BIND_COMBINE_U(cputype, name)                              \
+void                                                                          \
+pixman_composite_scanline_##name##_mask_asm_##cputype (int32_t         w,     \
+                                                       const uint32_t *dst,   \
+                                                       const uint32_t *src,   \
+                                                       const uint32_t *mask); \
+                                                                              \
+void                                                                          \
+pixman_composite_scanline_##name##_asm_##cputype (int32_t         w,          \
+                                                  const uint32_t *dst,        \
+                                                  const uint32_t *src);       \
+                                                                              \
+static void                                                                   \
+cputype##_combine_##name##_u (pixman_implementation_t *imp,                   \
+                              pixman_op_t              op,                    \
+                              uint32_t *               dest,                  \
+                              const uint32_t *         src,                   \
+                              const uint32_t *         mask,                  \
+                              int                      width)                 \
+{                                                                             \
+    if (mask)                                                                 \
+        pixman_composite_scanline_##name##_mask_asm_##cputype (width, dest,   \
+                                                               src, mask);    \
+    else                                                                      \
+        pixman_composite_scanline_##name##_asm_##cputype (width, dest, src);  \
+}
 
 #endif
