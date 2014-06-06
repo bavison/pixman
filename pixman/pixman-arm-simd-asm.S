@@ -515,7 +515,7 @@ generate_composite_function \
 .endm
 
 generate_composite_function \
-    pixman_composite_over_8888_8888_asm_armv6, 32, 0, 32 \
+    pixman_composite_over_8888_8888_asm_armv6, 32, 0, 32, \
     FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS \
     2, /* prefetch distance */ \
     over_8888_8888_init, \
@@ -523,6 +523,138 @@ generate_composite_function \
     nop_macro, /* cleanup */ \
     over_8888_8888_process_head, \
     over_8888_8888_process_tail
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS \
+    2, /* prefetch distance */ \
+    over_8888_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    over_8888_8888_process_head, \
+    over_8888_8888_process_tail
+
+/******************************************************************************/
+
+.macro over_8888_8888_8888_init
+        WK4     .req    Y
+        WK5     .req    STRIDE_D
+        WK6     .req    STRIDE_S
+        WK7     .req    STRIDE_M
+        HALF    .req    ORIG_W
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        /* Point at alpha bytes in mask */
+        add     MASK, MASK, #3
+        line_saved_regs Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro over_8888_8888_8888_newline
+        ldr     HALF, =0x00800080
+.endm
+
+.macro over_8888_8888_8888_cleanup
+        .unreq  WK4
+        .unreq  WK5
+        .unreq  WK6
+        .unreq  WK7
+        .unreq  HALF
+.endm
+
+.macro over_8888_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        pixld   , 16, 0, SRC, unaligned_src
+        pixld   , 8, 4, DST, 0
+        teq     WK0, #0
+        teqeq   WK2, #0
+        ldrb    WK2, [MASK], #4
+        ldrb    WK6, [MASK], #4
+        ldrb    WK7, [MASK], #4
+        ldrb    SCRATCH, [MASK], #4
+        teqeq   WK1, #0
+        teqeq   WK3, #0
+        orr     WK3, WK6, WK7, lsl #8
+        pixld   , 8, 6, DST, 0
+        orr     WK3, WK3, SCRATCH, lsl #16
+        // Here we have 2 SRC words in WK0-WK1, 1 MASK byte in WK2, 4 DST words in WK4-WK7
+ .elseif numbytes == 8
+        pixld   , 8, 2, SRC, unaligned_src
+        pixld   , 8, 6, DST, 0
+        ldrb    WK4, [MASK], #4
+        ldrb    WK5, [MASK], #4
+        teq     WK2, #0
+        teqeq   WK3, #0
+        // Here we have 2 SRC words in WK2-WK3, 2 MASK bytes in WK4-WK5, 2 DST words in WK6-WK7
+ .else // numbytes == 4
+        pixld   , 4, 2, SRC, unaligned_src
+        pixld   , 4, 6, DST, 0
+        ldrb    WK4, [MASK], #4
+        teq     WK2, #0
+        // Here we have 1 SRC word in WK2, 1 MASK byte in WK4, 1 DST word in WK6
+ .endif
+.endm
+
+.macro over_8888_8888_8888_1pixel  src, mask, dst, ff, stall1action, stall2action, stall3action
+        uxtb16  SCRATCH, src
+        uxtb16  src, src, ror #8
+        mla     SCRATCH, SCRATCH, mask, HALF
+        mla     src, src, mask, HALF
+        stall1action
+        uxtab16 SCRATCH, SCRATCH, SCRATCH, ror #8
+        uxtab16 src, src, src, ror #8
+        mov     SCRATCH, SCRATCH, ror #8
+        sub     mask, ff, src, lsr #24
+        sel     src, SCRATCH, src
+        uxtb16  SCRATCH, dst
+        uxtb16  dst, dst, ror #8
+        mla     SCRATCH, SCRATCH, mask, HALF
+        mla     dst, dst, mask, HALF
+        stall2action
+        uxtab16 SCRATCH, SCRATCH, SCRATCH, ror #8
+        stall3action
+        uxtab16 dst, dst, dst, ror #8
+        mov     SCRATCH, SCRATCH, ror #8
+        sel     dst, SCRATCH, dst
+        uqadd8  dst, dst, src
+.endm
+
+.macro over_8888_8888_8888_process_tail  cond, numbytes, firstreg
+ .if numbytes == 16
+        beq     10f // all source pixels are transparent
+        teq     WK2, #0
+        teqeq   WK3, #0
+        beq     10f // all mask pixels are transparent
+        over_8888_8888_8888_1pixel WK0, WK2, WK4, WK3, <mov WK3, #0xFF>,, <ldrb WK2, [MASK, #-12]>
+        over_8888_8888_8888_1pixel WK1, WK2, WK5, WK3,, <ldr WK0, [SRC, #-8]>, <ldrb WK2, [MASK, #-8]>
+        over_8888_8888_8888_1pixel WK0, WK2, WK6, WK3,, <ldr WK1, [SRC, #-4]>, <ldrb WK2, [MASK, #-4]>
+        over_8888_8888_8888_1pixel WK1, WK2, WK7, WK3
+        pixst   , 16, 4, DST
+ .elseif numbytes == 8
+        beq     10f // all source pixels are transparent
+        teq     WK4, #0
+        teqeq   WK5, #0
+        beq     10f // all mask pixels are transparent
+        over_8888_8888_8888_1pixel WK2, WK4, WK6, WK1, <mov WK1, #0xFF>
+        over_8888_8888_8888_1pixel WK3, WK5, WK7, WK1
+        pixst   , 8, 6, DST
+ .else // numbytes == 4
+        teqne   WK4, #0
+        beq     10f // source or mask pixel is transparent
+        over_8888_8888_8888_1pixel WK2, WK4, WK6, WK1, <mov WK1, #0xFF>
+        pixst   , 4, 6, DST
+ .endif
+10:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS \
+    2, /* prefetch distance */ \
+    over_8888_8888_8888_init, \
+    over_8888_8888_8888_newline, \
+    over_8888_8888_8888_cleanup, \
+    over_8888_8888_8888_process_head, \
+    over_8888_8888_8888_process_tail
 
 /******************************************************************************/
 

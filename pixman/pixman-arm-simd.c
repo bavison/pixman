@@ -296,10 +296,14 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
     { PIXMAN_OP_NONE },
 };
 
+PIXMAN_ARM_BIND_COMBINE_U (armv6, over)
+
 pixman_implementation_t *
 _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
 {
     pixman_implementation_t *imp = _pixman_implementation_create (fallback, arm_simd_fast_paths);
+
+    imp->combine_32[PIXMAN_OP_OVER] = armv6_combine_over_u;
 
     imp->blt = arm_simd_blt;
     imp->fill = arm_simd_fill;
