@@ -1612,3 +1612,80 @@ generate_composite_function \
     over_8888_x_0565_process_tail
 
 /******************************************************************************/
+
+.macro in_n_8888_init
+        /* Source components and constant half are loop invariants */
+        ldr     SRC, [sp, #ARGS_STACK_OFFSET]
+        ldr     MASK, =0x00800080
+        uxtb16  STRIDE_S, SRC    @ rb
+        uxtb16  SRC, SRC, ror #8 @ ag
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        uadd8   SCRATCH, MASK, MASK
+.endm
+
+.macro in_n_8888_1pixel  dst, rb, ag, a
+        mla     dst, rb, a, MASK
+        mla     a, ag, a, MASK
+        uxtab16 dst, dst, dst, ror #8
+        uxtab16 a, a, a, ror #8
+        mov     dst, dst, ror #8
+        sel     dst, dst, a
+.endm
+
+.macro in_n_8888_2pixels  dst0, dst1, rb, ag, a0, a1
+        mla     dst0, rb, a0, MASK
+        mla     a0, ag, a0, MASK
+        mla     dst1, rb, a1, MASK
+        mla     a1, ag, a1, MASK
+        uxtab16 dst0, dst0, dst0, ror #8
+        uxtab16 a0, a0, a0, ror #8
+        uxtab16 dst1, dst1, dst1, ror #8
+        uxtab16 a1, a1, a1, ror #8
+        mov     dst0, dst0, ror #8
+        mov     dst1, dst1, ror #8
+        sel     dst0, dst0, a0
+        sel     dst1, dst1, a1
+.endm
+
+.macro in_n_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 4
+        ldrb    SCRATCH, [DST, #3]
+        add     DST, DST, #4
+ .elseif numbytes == 8
+        ldrb    SCRATCH, [DST, #3]
+        ldrb    STRIDE_M, [DST, #7]
+        add     DST, DST, #8
+ .else // numbytes == 16
+        ldrb    SCRATCH, [DST, #3] @ it's OK, SCRATCH isn't used for prefetch of dest buffer
+        ldrb    STRIDE_M, [DST, #7]
+        pixld   , 16, 0, DST, 0
+ .endif
+.endm
+
+.macro in_n_8888_process_tail  cond, numbytes, firstreg
+ .if numbytes == 4
+        in_n_8888_1pixel WK3, STRIDE_S, SRC, SCRATCH
+        pixst   , 4, 3, DST
+ .elseif numbytes == 8
+        in_n_8888_2pixels WK2, WK3, STRIDE_S, SRC, SCRATCH, STRIDE_M
+        pixst   , 8, 2, DST
+ .else // numbytes == 16
+        in_n_8888_2pixels WK0, WK1, STRIDE_S, SRC, SCRATCH, STRIDE_M
+        uxtb    SCRATCH, WK2, ror #24
+        uxtb    STRIDE_M, WK3, ror #24
+        in_n_8888_2pixels WK2, WK3, STRIDE_S, SRC, SCRATCH, STRIDE_M
+        pixst   , 16, 0, DST
+ .endif
+.endm
+
+generate_composite_function \
+    pixman_composite_in_n_8888_asm_armv6, 0, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE, \
+    2, /* prefetch distance */ \
+    in_n_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    in_n_8888_process_head, \
+    in_n_8888_process_tail
+
+/******************************************************************************/
