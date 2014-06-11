@@ -70,6 +70,8 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 0565_0565, SRC,
 PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 8888_8888, SRC,
                                         uint32_t, uint32_t)
 
+PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
+
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
                                        int32_t   h,
@@ -283,6 +285,8 @@ pixman_implementation_t *
 _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
 {
     pixman_implementation_t *imp = _pixman_implementation_create (fallback, arm_simd_fast_paths);
+
+    imp->combine_32[PIXMAN_OP_ADD] = armv6_combine_add_u;
 
     imp->blt = arm_simd_blt;
     imp->fill = arm_simd_fill;
