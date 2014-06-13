@@ -1495,3 +1495,379 @@ generate_composite_function_single_scanline \
     add_8888_8888_8888_process_tail
 
 /******************************************************************************/
+
+.macro inout_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        /* Point at alpha byte in source / mask / dest */
+ .if REVERSE
+        add     SRC, SRC, #3
+ .endif
+ .if WITH_MASK
+        add     MASK, MASK, #3
+ .endif
+ .if !REVERSE
+        add     DST, DST, #3
+ .endif
+        line_saved_regs Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro inout_newline
+        ldr     Y, =0x00800080
+        mov     STRIDE_D, #0xff
+.endm
+
+.macro inout_1pixel  s, m, d, tmp, half, ff, offset
+        uxtb16  tmp, s
+ .if !IN_NOT_OUT
+        bic     d, ff, d
+ .endif
+        uxtb16  s, s, ror #8
+ .if WITH_MASK
+        mla     tmp, tmp, m, half
+        mla     s, s, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        uxtb16  tmp, tmp, ror #8
+        uxtb16  s, s, ror #8
+ .endif
+        mla     tmp, tmp, d, half
+        mla     s, s, d, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        mov     tmp, tmp, ror #8
+        sel     s, tmp, s
+        str     s, [DST, #offset]
+.endm
+
+.macro inout_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half, ff, offset
+        uxtb16  tmp0, s0
+        uxtb16  s0, s0, ror #8
+ .if !IN_NOT_OUT
+        bic     d0, ff, d0
+        bic     d1, ff, d1
+ .endif
+        uxtb16  tmp1, s1
+        uxtb16  s1, s1, ror #8
+ .if WITH_MASK
+        mla     tmp0, tmp0, m0, half
+        mla     s0, s0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     s1, s1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        uxtb16  tmp0, tmp0, ror #8
+        uxtb16  s0, s0, ror #8
+        uxtb16  tmp1, tmp1, ror #8
+        uxtb16  s1, s1, ror #8
+ .endif
+        mla     tmp0, tmp0, d0, half
+        mla     s0, s0, d0, half
+        mla     tmp1, tmp1, d1, half
+        mla     s1, s1, d1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     s0, tmp0, s0
+        sel     s1, tmp1, s1
+        strd    s0, s1, [DST, #offset]
+.endm
+
+.macro inout_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes >= 8
+        pixld   , 8, 0, SRC, unaligned_src
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+  .endif
+        ldrb    WK2, [DST], #4
+        ldrb    WK3, [DST], #4
+  .if numbytes == 16
+        inout_2pixels  WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -11
+        pixld   , 8, 0, SRC, unaligned_src
+   .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+   .endif
+        ldrb    WK2, [DST], #4
+        ldrb    WK3, [DST], #4
+  .endif
+ .else // numbytes == 4
+        pixld   , 4, 0, SRC, unaligned_src
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+  .endif
+        ldrb    WK2, [DST], #4
+ .endif
+.endm
+
+.macro inout_process_tail  cond, numbytes, firstreg
+ .if numbytes >= 8
+        inout_2pixels  WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -11
+ .else // numbytes == 4
+        inout_1pixel  WK0, STRIDE_S, WK2, SCRATCH, Y, STRIDE_D, -7
+ .endif
+.endm
+
+.macro inout_reverse_1pixel  s, m, d, tmp, half, ff, offset
+ .if WITH_MASK
+        smlabb  s, s, m, half
+        uxtb16  tmp, d
+        uxtb16  d, d, ror #8
+        uxtab   s, s, s, ror #8
+  .if IN_NOT_OUT
+        and     s, ff, s, lsr #8
+  .else
+        bic     s, ff, s, lsr #8
+  .endif
+ .else
+  .if !IN_NOT_OUT
+        bic     s, ff, s
+  .endif
+        uxtb16  tmp, d
+        uxtb16  d, d, ror #8
+ .endif
+        mla     tmp, tmp, s, half
+        mla     d, d, s, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 d, d, d, ror #8
+        mov     tmp, tmp, ror #8
+        sel     d, tmp, d
+        str     d, [DST, #offset]
+.endm
+
+.macro inout_reverse_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half, ff, offset
+ .if WITH_MASK
+        smlabb  s0, s0, m0, half
+        smlabb  s1, s1, m1, half
+        uxtb16  tmp0, d0
+        uxtb16  d0, d0, ror #8
+        uxtab   s0, s0, s0, ror #8
+        uxtab   s1, s1, s1, ror #8
+  .if IN_NOT_OUT
+        and     s0, ff, s0, lsr #8
+        and     s1, ff, s1, lsr #8
+  .else
+        bic     s0, ff, s0, lsr #8
+        bic     s1, ff, s1, lsr #8
+  .endif
+ .else
+  .if !IN_NOT_OUT
+        bic     s0, ff, s0
+        bic     s1, ff, s1
+  .endif
+        uxtb16  tmp0, d0
+        uxtb16  d0, d0, ror #8
+ .endif
+        uxtb16  tmp1, d1
+        uxtb16  d1, d1, ror #8
+        mla     tmp0, tmp0, s0, half
+        mla     d0, d0, s0, half
+        mla     tmp1, tmp1, s1, half
+        mla     d1, d1, s1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 d0, d0, d0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 d1, d1, d1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     d0, tmp0, d0
+        sel     d1, tmp1, d1
+        strd    d0, d1, [DST, #offset]
+.endm
+
+.macro inout_reverse_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        ldrb    WK0, [SRC], #4
+        ldrb    WK1, [SRC], #4
+        ldrb    SCRATCH, [SRC], #4
+        ldrb    ORIG_W, [SRC], #4
+  .if IN_NOT_OUT
+        and     WK2, WK0, WK1
+        and     WK2, WK2, SCRATCH
+        and     WK2, WK2, ORIG_W
+        bics    WK2, STRIDE_D, WK2
+  .else
+        orr     WK2, WK0, WK1
+        orr     WK2, WK2, SCRATCH
+        orrs    WK2, WK2, ORIG_W
+  .endif
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+        ldrb    SCRATCH, [MASK], #4
+        ldrb    ORIG_W, [MASK], #4
+  .endif
+        ldrd    WK2, WK3, [DST], #16
+  .if WITH_MASK
+        bne     10f
+   .if IN_NOT_OUT
+        and     SCRATCH, SCRATCH, ORIG_W
+        and     SCRATCH, SCRATCH, STRIDE_S
+        and     SCRATCH, SCRATCH, STRIDE_M
+        bics    SCRATCH, STRIDE_D, SCRATCH
+   .else
+        orr     SCRATCH, SCRATCH, ORIG_W
+        orr     SCRATCH, SCRATCH, STRIDE_S
+        orrs    SCRATCH, SCRATCH, STRIDE_M
+   .endif
+  .endif
+        beq     20f
+10:
+        inout_reverse_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -16
+  .if IN_NOT_OUT && !WITH_MASK
+        ldrd    WK2, WK3, [DST, #-8]
+  .endif
+        ldrb    WK0, [SRC, #-8]
+        ldrb    WK1, [SRC, #-4]
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK, #-8]
+        ldrb    STRIDE_M, [MASK, #-4]
+  .endif
+  .if !(IN_NOT_OUT && !WITH_MASK)
+        ldrd    WK2, WK3, [DST, #-8]
+  .endif
+ .elseif numbytes == 8
+  .if IN_NOT_OUT && !WITH_MASK
+        ldrd    WK2, WK3, [DST], #8
+  .endif
+        ldrb    WK0, [SRC], #4
+        ldrb    WK1, [SRC], #4
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+  .endif
+  .if !(IN_NOT_OUT && !WITH_MASK)
+        ldrd    WK2, WK3, [DST], #8
+  .endif
+ .else // numbytes == 4
+  .if IN_NOT_OUT && !WITH_MASK
+        ldr     WK2, [DST], #4
+  .endif
+        ldrb    WK0, [SRC], #4
+  .if WITH_MASK
+        ldrb    STRIDE_S, [MASK], #4
+  .endif
+  .if !(IN_NOT_OUT && !WITH_MASK)
+        ldr     WK2, [DST], #4
+  .endif
+ .endif
+.endm
+
+.macro inout_reverse_process_tail  cond, numbytes, firstreg
+ .if numbytes >= 8
+        inout_reverse_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -8
+ .else // numbytes == 4
+        inout_reverse_1pixel WK0, STRIDE_S, WK2, SCRATCH, Y, STRIDE_D, -4
+ .endif
+20:
+.endm
+
+.set REVERSE, 0
+.set IN_NOT_OUT, 0
+.set WITH_MASK, 0
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_out_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_process_head, \
+    inout_process_tail
+
+.set WITH_MASK, 1
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_out_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_process_head, \
+    inout_process_tail
+
+.set IN_NOT_OUT, 1
+.set WITH_MASK, 0
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_in_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_process_head, \
+    inout_process_tail
+
+.set WITH_MASK, 1
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_in_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_process_head, \
+    inout_process_tail
+
+.set REVERSE, 1
+.set IN_NOT_OUT, 0
+.set WITH_MASK, 0
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_out_reverse_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_reverse_process_head, \
+    inout_reverse_process_tail
+
+.set WITH_MASK, 1
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_out_reverse_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_reverse_process_head, \
+    inout_reverse_process_tail
+
+.set IN_NOT_OUT, 1
+.set WITH_MASK, 0
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_in_reverse_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_reverse_process_head, \
+    inout_reverse_process_tail
+
+.set WITH_MASK, 1
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_in_reverse_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    inout_init, \
+    inout_newline, \
+    nop_macro, /* cleanup */ \
+    inout_reverse_process_head, \
+    inout_reverse_process_tail
+
+/******************************************************************************/
