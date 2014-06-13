@@ -82,6 +82,10 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 8888_8888, SRC,
                                         uint32_t, uint32_t)
 
 PIXMAN_ARM_BIND_COMBINE_U (armv6, over_reverse)
+PIXMAN_ARM_BIND_COMBINE_U (armv6, in)
+PIXMAN_ARM_BIND_COMBINE_U (armv6, in_reverse)
+PIXMAN_ARM_BIND_COMBINE_U (armv6, out)
+PIXMAN_ARM_BIND_COMBINE_U (armv6, out_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
 void
@@ -309,6 +313,10 @@ _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
     pixman_implementation_t *imp = _pixman_implementation_create (fallback, arm_simd_fast_paths);
 
     imp->combine_32[PIXMAN_OP_OVER_REVERSE] = armv6_combine_over_reverse_u;
+    imp->combine_32[PIXMAN_OP_IN] = armv6_combine_in_u;
+    imp->combine_32[PIXMAN_OP_IN_REVERSE] = armv6_combine_in_reverse_u;
+    imp->combine_32[PIXMAN_OP_OUT] = armv6_combine_out_u;
+    imp->combine_32[PIXMAN_OP_OUT_REVERSE] = armv6_combine_out_reverse_u;
     imp->combine_32[PIXMAN_OP_ADD] = armv6_combine_add_u;
 
     imp->blt = arm_simd_blt;
