@@ -536,6 +536,261 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro over_reverse_8888_8888_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+
+        /* Keep WK0,WK1 where they are so they remain valid for LDRD */
+        .unreq  WK2
+        .unreq  WK3
+        WK2     .req    STRIDE_S
+        WK3     .req    STRIDE_M
+        WK4     .req    r10
+        WK5     .req    r11
+
+        line_saved_regs STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro over_reverse_8888_8888_newline
+        ldr     MASK, =0x00800080
+        mov     STRIDE_D, #0xff
+.endm
+
+.macro over_reverse_8888_8888_cleanup
+        .unreq  WK2
+        .unreq  WK3
+        .unreq  WK4
+        .unreq  WK5
+        WK2     .req    r10
+        WK3     .req    r11
+.endm
+
+.macro over_reverse_8888_8888_1pixel  s0, d0, tmp0, tmp1, half, ff, offset
+        uxtb16  tmp0, s0
+        sub     tmp1, ff, d0, lsr #24
+        uxtb16  s0, s0, ror #8
+        mla     tmp0, tmp0, tmp1, half
+        mla     s0, s0, tmp1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        mov     tmp0, tmp0, ror #8
+        sel     s0, tmp0, s0
+        uqadd8  WK0, d0, s0
+        str     WK0, [DST, #offset]
+.endm
+
+.macro over_reverse_8888_8888_2pixels  s0, s1, d0, d1, tmp0, tmp1, tmp2, tmp3, half, ff, offset
+        uxtb16  tmp0, s0
+        uxtb16  s0, s0, ror #8
+        sub     tmp2, ff, d0, lsr #24
+        sub     tmp3, ff, d1, lsr #24
+        uxtb16  tmp1, s1
+        uxtb16  s1, s1, ror #8
+        mla     tmp0, tmp0, tmp2, half
+        mla     s0, s0, tmp2, half
+        mla     tmp1, tmp1, tmp3, half
+        mla     s1, s1, tmp3, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     s0, tmp0, s0
+        sel     s1, tmp1, s1
+        uqadd8  WK0, d0, s0
+        uqadd8  WK1, d1, s1
+        strd    WK0, WK1, [DST, #offset]
+.endm
+
+.macro over_reverse_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        pixld   , 16, 2, DST, 0
+        ldrd    WK0, WK1, [SRC], #16
+        and     SCRATCH, WK2, WK3
+        and     SCRATCH, SCRATCH, WK4
+        and     SCRATCH, SCRATCH, WK5
+        teq     STRIDE_D, SCRATCH, lsr #24
+ .elseif numbytes == 8
+        pixld   , 8, 2, DST, 0
+        pixld   , 8, 0, SRC, unaligned_src
+        and     SCRATCH, WK2, WK3
+        teq     STRIDE_D, SCRATCH, lsr #24
+ .else // numbytes == 4
+        pixld   , 4, 2, DST, 0
+        pixld   , 4, 0, SRC, unaligned_src
+        teq     STRIDE_D, WK2, lsr #24
+ .endif
+.endm
+
+.macro over_reverse_8888_8888_process_tail  cond, numbytes, firstreg
+        beq     10f // all destination pixels are opaque
+ .if numbytes == 16
+        over_reverse_8888_8888_2pixels WK0, WK1, WK2, WK3, WK4, WK5, ORIG_W, SCRATCH, MASK, STRIDE_D, -16
+        ldmdb   SRC, {WK2, WK3}
+        ldmdb   DST, {WK0, WK1}
+        over_reverse_8888_8888_2pixels WK2, WK3, WK0, WK1, WK4, WK5, ORIG_W, SCRATCH, MASK, STRIDE_D, -8
+ .elseif numbytes == 8
+        over_reverse_8888_8888_2pixels WK0, WK1, WK2, WK3, WK4, WK5, ORIG_W, SCRATCH, MASK, STRIDE_D, -8
+ .else // numbytes == 4
+        over_reverse_8888_8888_1pixel WK0, WK2, WK4, ORIG_W, MASK, STRIDE_D, -4
+ .endif
+10:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_reverse_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_reverse_8888_8888_init, \
+    over_reverse_8888_8888_newline, \
+    over_reverse_8888_8888_cleanup, \
+    over_reverse_8888_8888_process_head, \
+    over_reverse_8888_8888_process_tail
+
+/******************************************************************************/
+
+.macro over_reverse_8888_8888_8888_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        /* Point at alpha byte in mask */
+        add     MASK, MASK, #3
+
+        /* Keep WK0,WK1 where they are so they remain valid for LDRD */
+        .unreq  WK2
+        .unreq  WK3
+        WK2     .req    STRIDE_S
+        WK3     .req    STRIDE_M
+        WK4     .req    r10
+        WK5     .req    r11
+
+        line_saved_regs Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro over_reverse_8888_8888_8888_newline
+        ldr     Y, =0x00800080
+        mov     STRIDE_D, #0xff
+.endm
+
+.macro over_reverse_8888_8888_8888_cleanup
+        .unreq  WK2
+        .unreq  WK3
+        .unreq  WK4
+        .unreq  WK5
+        WK2     .req    r10
+        WK3     .req    r11
+.endm
+
+.macro over_reverse_8888_8888_8888_1pixel  s, m, d, tmp, half, ff, offset
+        uxtb16  tmp, s
+        uxtb16  s, s, ror #8
+        mla     tmp, tmp, m, half
+        mla     s, s, m, half
+        sub     m, ff, d, lsr #24
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        uxtb16  tmp, tmp, ror #8
+        uxtb16  s, s, ror #8
+        mla     tmp, tmp, m, half
+        mla     s, s, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        mov     tmp, tmp, ror #8
+        sel     s, tmp, s
+        uqadd8  d, d, s
+        str     d, [DST, #offset]
+.endm
+
+.macro over_reverse_8888_8888_8888_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half, ff, offset
+        uxtb16  tmp0, s0
+        uxtb16  s0, s0, ror #8
+        uxtb16  tmp1, s1
+        uxtb16  s1, s1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     s0, s0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     s1, s1, m1, half
+        sub     m0, ff, d0, lsr #24
+        sub     m1, ff, d1, lsr #24
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        uxtb16  tmp0, tmp0, ror #8
+        uxtb16  s0, s0, ror #8
+        uxtb16  tmp1, tmp1, ror #8
+        uxtb16  s1, s1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     s0, s0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     s1, s1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     s0, tmp0, s0
+        sel     s1, tmp1, s1
+        uqadd8  WK0, d0, s0
+        uqadd8  WK1, d1, s1
+        strd    WK0, WK1, [DST, #offset]
+.endm
+
+.macro over_reverse_8888_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        pixld   , 16, 2, DST, 0
+        ldrd    WK0, WK1, [SRC], #16
+        ldrb    ORIG_W, [MASK], #16
+        and     SCRATCH, WK2, WK3
+        and     SCRATCH, SCRATCH, WK4
+        and     SCRATCH, SCRATCH, WK5
+        teq     STRIDE_D, SCRATCH, lsr #24
+ .elseif numbytes == 8
+        pixld   , 8, 2, DST, 0
+        pixld   , 8, 0, SRC, unaligned_src
+        ldrb    ORIG_W, [MASK], #8
+        and     SCRATCH, WK2, WK3
+        teq     STRIDE_D, SCRATCH, lsr #24
+ .else // numbytes == 4
+        pixld   , 4, 2, DST, 0
+        pixld   , 4, 0, SRC, unaligned_src
+        ldrb    ORIG_W, [MASK], #4
+        teq     STRIDE_D, WK2, lsr #24
+ .endif
+.endm
+
+.macro over_reverse_8888_8888_8888_process_tail  cond, numbytes, firstreg
+        beq     10f // all destination pixels are opaque
+ .if numbytes == 16
+        ldrb    SCRATCH, [MASK, #-12]
+        over_reverse_8888_8888_8888_2pixels WK0, WK1, ORIG_W, SCRATCH, WK2, WK3, WK4, WK5, Y, STRIDE_D, -16
+        ldmdb   SRC, {WK2, WK3}
+        ldrb    ORIG_W, [MASK, #-8]
+        ldrb    SCRATCH, [MASK, #-4]
+        ldmdb   DST, {WK0, WK1}
+        over_reverse_8888_8888_8888_2pixels WK2, WK3, ORIG_W, SCRATCH, WK0, WK1, WK4, WK5, Y, STRIDE_D, -8
+ .elseif numbytes == 8
+        ldrb    SCRATCH, [MASK, #-4]
+        over_reverse_8888_8888_8888_2pixels WK0, WK1, ORIG_W, SCRATCH, WK2, WK3, WK4, WK5, Y, STRIDE_D, -8
+ .else // numbytes == 4
+        over_reverse_8888_8888_8888_1pixel WK0, ORIG_W, WK2, WK4, Y, STRIDE_D, -4
+ .endif
+10:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_reverse_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_reverse_8888_8888_8888_init, \
+    over_reverse_8888_8888_8888_newline, \
+    over_reverse_8888_8888_8888_cleanup, \
+    over_reverse_8888_8888_8888_process_head, \
+    over_reverse_8888_8888_8888_process_tail
+
+/******************************************************************************/
+
 /* Multiply each byte of a word by a byte.
  * Useful when there aren't any obvious ways to fill the stalls with other instructions.
  * word  Register containing 4 bytes
