@@ -438,27 +438,6 @@ generate_composite_function_single_scanline \
 
 /******************************************************************************/
 
-.macro over_8888_8888_init
-        /* Hold loop invariant in MASK */
-        ldr     MASK, =0x00800080
-        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
-        uadd8   SCRATCH, MASK, MASK
-        line_saved_regs STRIDE_D, STRIDE_S, ORIG_W
-.endm
-
-.macro over_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
-    WK4     .req    STRIDE_D
-    WK5     .req    STRIDE_S
-    WK6     .req    STRIDE_M
-    WK7     .req    ORIG_W
-        pixld   , numbytes, %(4+firstreg), SRC, unaligned_src
-        pixld   , numbytes, firstreg, DST, 0
-    .unreq  WK4
-    .unreq  WK5
-    .unreq  WK6
-    .unreq  WK7
-.endm
-
 .macro over_8888_8888_check_transparent  numbytes, reg0, reg1, reg2, reg3
         /* Since these colours a premultiplied by alpha, only 0 indicates transparent (any other colour with 0 in the alpha byte is luminous) */
         teq     WK&reg0, #0
@@ -471,65 +450,95 @@ generate_composite_function_single_scanline \
  .endif
 .endm
 
-.macro over_8888_8888_prepare  next
-        mov     WK&next, WK&next, lsr #24
+.macro over_8888_8888_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        line_saved_regs Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
 .endm
 
-.macro over_8888_8888_1pixel src, dst, offset, next
-        /* src = destination component multiplier */
-        rsb     WK&src, WK&src, #255
-        /* Split even/odd bytes of dst into SCRATCH/dst */
-        uxtb16  SCRATCH, WK&dst
-        uxtb16  WK&dst, WK&dst, ror #8
-        /* Multiply through, adding 0.5 to the upper byte of result for rounding */
-        mla     SCRATCH, SCRATCH, WK&src, MASK
-        mla     WK&dst, WK&dst, WK&src, MASK
-        /* Where we would have had a stall between the result of the first MLA and the shifter input,
-         * reload the complete source pixel */
-        ldr     WK&src, [SRC, #offset]
-        /* Multiply by 257/256 to approximate 256/255 */
-        uxtab16 SCRATCH, SCRATCH, SCRATCH, ror #8
-        /* In this stall, start processing the next pixel */
- .if offset < -4
-        mov     WK&next, WK&next, lsr #24
+.macro over_8888_8888_newline
+        ldr     Y, =0x00800080
+        mov     STRIDE_D, #0xff
+.endm
+
+.macro over_8888_8888_1pixel  s, m, d, tmp, half, ff, offset
+        sub     m, ff, s, lsr #24
+        uxtb16  tmp, d
+        uxtb16  d, d, ror #8
+        mla     tmp, tmp, m, half
+        mla     d, d, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 d, d, d, ror #8
+        mov     tmp, tmp, ror #8
+        sel     d, tmp, d
+        uqadd8  d, d, s
+        str     d, [DST, #offset]
+.endm
+
+.macro over_8888_8888_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half, ff, offset
+        sub     m0, ff, s0, lsr #24
+        sub     m1, ff, s1, lsr #24
+        uxtb16  tmp0, d0
+        uxtb16  d0, d0, ror #8
+        uxtb16  tmp1, d1
+        uxtb16  d1, d1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     d0, d0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     d1, d1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 d0, d0, d0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 d1, d1, d1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     d0, tmp0, d0
+        sel     d1, tmp1, d1
+        uqadd8  d0, d0, s0
+        uqadd8  d1, d1, s1
+        strd    d0, d1, [DST, #offset]
+.endm
+
+.macro over_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        ldm     SRC!, {WK0, WK1}
+        ldm     SRC!, {STRIDE_S, STRIDE_M}
+        ldrd    WK2, WK3, [DST], #16
+        orr     SCRATCH, WK0, WK1
+        orr     SCRATCH, SCRATCH, STRIDE_S
+        orrs    SCRATCH, SCRATCH, STRIDE_M
+        beq     20f
+        over_8888_8888_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -16
+        ldrd    WK0, WK1, [SRC, #-8]
+        ldrd    WK2, WK3, [DST, #-8]
+ .elseif numbytes == 8
+        ldrd    WK0, WK1, [SRC], #8
+        ldrd    WK2, WK3, [DST], #8
+        orrs    SCRATCH, WK0, WK1
+        beq     20f
+ .else // numbytes == 4
+        ldr     WK0, [SRC], #4
+        ldr     WK2, [DST], #4
+        teq     WK0, #0
+        beq     20f
  .endif
-        uxtab16 WK&dst, WK&dst, WK&dst, ror #8
-        /* Recombine even/odd bytes of multiplied destination */
-        mov     SCRATCH, SCRATCH, ror #8
-        sel     WK&dst, SCRATCH, WK&dst
-        /* Saturated add of source to multiplied destination */
-        uqadd8  WK&dst, WK&dst, WK&src
 .endm
 
 .macro over_8888_8888_process_tail  cond, numbytes, firstreg
-    WK4     .req    STRIDE_D
-    WK5     .req    STRIDE_S
-    WK6     .req    STRIDE_M
-    WK7     .req    ORIG_W
-        over_8888_8888_check_transparent numbytes, %(4+firstreg), %(5+firstreg), %(6+firstreg), %(7+firstreg)
-        beq     10f
-        over_8888_8888_prepare  %(4+firstreg)
- .set PROCESS_REG, firstreg
- .set PROCESS_OFF, -numbytes
- .rept numbytes / 4
-        over_8888_8888_1pixel %(4+PROCESS_REG), %(0+PROCESS_REG), PROCESS_OFF, %(5+PROCESS_REG)
-  .set PROCESS_REG, PROCESS_REG+1
-  .set PROCESS_OFF, PROCESS_OFF+4
- .endr
-        pixst   , numbytes, firstreg, DST
-10:
-    .unreq  WK4
-    .unreq  WK5
-    .unreq  WK6
-    .unreq  WK7
+ .if numbytes >= 8
+        over_8888_8888_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -8
+ .else // numbytes == 4
+        over_8888_8888_1pixel WK0, STRIDE_S, WK2, SCRATCH, Y, STRIDE_D, -4
+ .endif
+20:
 .endm
 
 generate_composite_function \
-    pixman_composite_over_8888_8888_asm_armv6, 32, 0, 32 \
-    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS \
+    pixman_composite_over_8888_8888_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
     2, /* prefetch distance */ \
     over_8888_8888_init, \
-    nop_macro, /* newline */ \
+    over_8888_8888_newline, \
     nop_macro, /* cleanup */ \
     over_8888_8888_process_head, \
     over_8888_8888_process_tail
