@@ -543,6 +543,146 @@ generate_composite_function \
     over_8888_8888_process_head, \
     over_8888_8888_process_tail
 
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_asm_armv6, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_CORRUPTS_PSR | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_8888_8888_init, \
+    over_8888_8888_newline \
+    nop_macro, /* cleanup */ \
+    over_8888_8888_process_head, \
+    over_8888_8888_process_tail
+
+/******************************************************************************/
+
+.macro over_8888_8888_8888_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        /* Point at alpha byte in mask */
+        add     MASK, MASK, #3
+        line_saved_regs Y, STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro over_8888_8888_8888_newline
+        ldr     Y, =0x00800080
+        mov     STRIDE_D, #0xff
+.endm
+
+.macro over_8888_8888_8888_1pixel  s, m, d, tmp, half, ff, offset
+        uxtb16  tmp, s
+        uxtb16  s, s, ror #8
+        mla     tmp, tmp, m, half
+        mla     s, s, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        mov     tmp, tmp, ror #8
+        sub     m, ff, s, lsr #24
+        sel     s, tmp, s
+        uxtb16  tmp, d
+        uxtb16  d, d, ror #8
+        mla     tmp, tmp, m, half
+        mla     d, d, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 d, d, d, ror #8
+        mov     tmp, tmp, ror #8
+        sel     d, tmp, d
+        uqadd8  d, d, s
+        str     d, [DST, #offset]
+.endm
+
+.macro over_8888_8888_8888_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half, ff, offset
+        uxtb16  tmp0, s0
+        uxtb16  s0, s0, ror #8
+        uxtb16  tmp1, s1
+        uxtb16  s1, s1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     s0, s0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     s1, s1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sub     m0, ff, s0, lsr #24
+        sub     m1, ff, s1, lsr #24
+        sel     s0, tmp0, s0
+        sel     s1, tmp1, s1
+        uxtb16  tmp0, d0
+        uxtb16  d0, d0, ror #8
+        uxtb16  tmp1, d1
+        uxtb16  d1, d1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     d0, d0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     d1, d1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 d0, d0, d0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 d1, d1, d1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     d0, tmp0, d0
+        sel     d1, tmp1, d1
+        uqadd8  d0, d0, s0
+        uqadd8  d1, d1, s1
+        strd    d0, d1, [DST, #offset]
+.endm
+
+.macro over_8888_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        ldm     SRC!, {WK0, WK1, SCRATCH, ORIG_W}
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+        orr     WK2, WK0, WK1
+        orr     WK2, WK2, SCRATCH
+        orrs    WK2, WK2, ORIG_W
+        ldrb    SCRATCH, [MASK], #4
+        ldrb    ORIG_W, [MASK], #4
+        ldrd    WK2, WK3, [DST], #16
+        bne     10f
+        orr     SCRATCH, SCRATCH, STRIDE_S
+        orr     SCRATCH, SCRATCH, STRIDE_M
+        orrs    SCRATCH, SCRATCH, ORIG_W
+        beq     20f
+10:
+        over_8888_8888_8888_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -16
+        ldrd    WK0, WK1, [SRC, #-8]
+        ldrb    STRIDE_S, [MASK, #-8]
+        ldrb    STRIDE_M, [MASK, #-4]
+        ldrd    WK2, WK3, [DST, #-8]
+ .elseif numbytes == 8
+        ldrd    WK0, WK1, [SRC], #8
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+        ldrd    WK2, WK3, [DST], #8
+ .else // numbytes == 4
+        ldr     WK0, [SRC], #4
+        ldrb    STRIDE_S, [MASK], #4
+        ldr     WK2, [DST], #4
+ .endif
+.endm
+
+.macro over_8888_8888_8888_process_tail  cond, numbytes, firstreg
+ .if numbytes >= 8
+        over_8888_8888_8888_2pixels WK0, WK1, STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, Y, STRIDE_D, -8
+ .else // numbytes == 4
+        over_8888_8888_8888_1pixel WK0, STRIDE_S, WK2, SCRATCH, Y, STRIDE_D, -4
+ .endif
+20:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_WK0, \
+    2, /* prefetch distance */ \
+    over_8888_8888_8888_init, \
+    over_8888_8888_8888_newline, \
+    nop_macro, /* cleanup */ \
+    over_8888_8888_8888_process_head, \
+    over_8888_8888_8888_process_tail
+
 /******************************************************************************/
 
 .macro over_reverse_8888_8888_init
