@@ -98,6 +98,17 @@ PIXMAN_ARM_BIND_COMBINE_U (armv6, out)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, out_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
+PIXMAN_ARM_BIND_GET_SCANLINE (armv6, r5g6b5)
+PIXMAN_ARM_BIND_WRITE_BACK   (armv6, r5g6b5)
+PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a8)
+
+static uint32_t *
+fast_dest_fetch_noop (pixman_iter_t *iter, const uint32_t *mask)
+{
+    iter->bits += iter->stride;
+    return iter->buffer;
+}
+
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
                                        int32_t   h,
@@ -307,6 +318,16 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
     { PIXMAN_OP_NONE },
 };
 
+static const pixman_iter_info_t arm_simd_iters[] =
+{
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, r5g6b5),
+    PIXMAN_ARM_WRITEBACK (armv6, r5g6b5),
+
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, a8),
+
+    { PIXMAN_null },
+};
+
 pixman_implementation_t *
 _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
 {
@@ -321,6 +342,7 @@ _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
     imp->combine_32[PIXMAN_OP_OUT_REVERSE] = armv6_combine_out_reverse_u;
     imp->combine_32[PIXMAN_OP_ADD] = armv6_combine_add_u;
 
+    imp->iter_info = arm_simd_iters;
     imp->blt = arm_simd_blt;
     imp->fill = arm_simd_fill;
 
