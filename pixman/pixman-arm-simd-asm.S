@@ -388,6 +388,16 @@ generate_composite_function \
     src_0565_8888_process_head, \
     src_0565_8888_process_tail
 
+generate_composite_function_single_scanline \
+    pixman_get_scanline_r5g6b5_asm_armv6, 16, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER, \
+    3, /* prefetch distance */ \
+    src_0565_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    src_0565_8888_process_head, \
+    src_0565_8888_process_tail
+
 /******************************************************************************/
 
 .macro src_x888_0565_init
@@ -464,6 +474,90 @@ generate_composite_function \
     nop_macro, /* cleanup */ \
     src_x888_0565_process_head, \
     src_x888_0565_process_tail
+
+generate_composite_function_single_scanline \
+    pixman_write_back_r5g6b5_asm_armv6, 32, 0, 16, \
+    FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS | FLAG_PROCESS_CORRUPTS_SCRATCH, \
+    3, /* prefetch distance */ \
+    src_x888_0565_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    src_x888_0565_process_head, \
+    src_x888_0565_process_tail
+
+/******************************************************************************/
+
+.macro src_8_8888_init
+        mov     MASK, #0xff000000
+.endm
+
+.macro src_8_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+        pixld   cond, numbytes/4, firstreg, SRC, unaligned_src
+.endm
+
+.macro src_8_8888_1pixel  cond, d0
+        mov&cond WK&d0, WK&d0, lsl #24
+.endm
+
+.macro src_8_8888_2pixels  cond, d0, d1
+        and&cond WK&d1, MASK, WK&d0, lsl #16
+        mov&cond WK&d0, WK&d0, lsl #24
+.endm
+
+.macro src_8_8888_4pixels  cond, d0, d1, d2, d3
+        and&cond WK&d3, MASK, WK&d0
+        and&cond WK&d2, MASK, WK&d0, lsl #8
+        and&cond WK&d1, MASK, WK&d0, lsl #16
+        mov&cond WK&d0, WK&d0, lsl #24
+.endm
+
+.macro src_8_8888_process_tail  cond, numbytes, firstreg
+ .if numbytes == 16
+        src_8_8888_4pixels  cond, %(firstreg+0), %(firstreg+1), %(firstreg+2), %(firstreg+3)
+ .elseif numbytes == 8
+        src_8_8888_2pixels  cond, %(firstreg+0), %(firstreg+1)
+ .else // numbytes == 4
+        src_8_8888_1pixel  cond, %(firstreg+0)
+ .endif
+.endm
+
+.macro src_8_8888_inner_loop  process_head, process_tail, unaligned_src, unaligned_mask, dst_alignment
+110: /* Length of inner loop is set to allow one preload per 32 source pixels */
+        ldr     STRIDE_M, [SRC], #4
+        and     WK3, MASK, STRIDE_M
+        and     WK2, MASK, STRIDE_M, lsl #8
+        and     WK1, MASK, STRIDE_M, lsl #16
+        mov     WK0, STRIDE_M, lsl #24
+        ldr     STRIDE_M, [SRC], #4
+ .rept 6
+        pixst   , 16, 0, DST
+        and     WK3, MASK, STRIDE_M
+        and     WK2, MASK, STRIDE_M, lsl #8
+        and     WK1, MASK, STRIDE_M, lsl #16
+        mov     WK0, STRIDE_M, lsl #24
+        ldr     STRIDE_M, [SRC], #4
+ .endr
+        pld     [SRC, SCRATCH]
+        pixst   , 16, 0, DST
+        and     WK3, MASK, STRIDE_M
+        and     WK2, MASK, STRIDE_M, lsl #8
+        and     WK1, MASK, STRIDE_M, lsl #16
+        mov     WK0, STRIDE_M, lsl #24
+        pixst   , 16, 0, DST
+        subs    X, X, #32
+        bhs     110b
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_get_scanline_a8_asm_armv6, 8, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_COND_EXEC | FLAG_PROCESS_PRESERVES_SCRATCH, \
+    2, /* prefetch distance */ \
+    src_8_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    src_8_8888_process_head, \
+    src_8_8888_process_tail, \
+    src_8_8888_inner_loop
 
 /******************************************************************************/
 

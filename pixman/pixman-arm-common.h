@@ -444,4 +444,66 @@ cputype##_combine_##name##_u (pixman_implementation_t *imp,                   \
         pixman_composite_scanline_##name##_asm_##cputype (width, dest, src);  \
 }
 
+/*****************************************************************************/
+
+/* Support for untransformed fetchers and writeback */
+
+#define PIXMAN_ARM_BIND_GET_SCANLINE(cputype, name)                         \
+void                                                                        \
+pixman_get_scanline_##name##_asm_##cputype (int32_t        w,               \
+                                            uint32_t       *dst,            \
+                                            const uint32_t *src);           \
+                                                                            \
+uint32_t *                                                                  \
+cputype##_get_scanline_##name (pixman_iter_t *iter, const uint32_t *mask)   \
+{                                                                           \
+    pixman_get_scanline_##name##_asm_##cputype (iter->width, iter->buffer,  \
+                                                (uint32_t *) iter->bits);   \
+    iter->bits += iter->stride;                                             \
+    return iter->buffer;                                                    \
+}
+
+#define PIXMAN_ARM_BIND_WRITE_BACK(cputype, name)                                      \
+void                                                                                   \
+pixman_write_back_##name##_asm_##cputype (int32_t        w,                            \
+                                          uint32_t       *dst,                         \
+                                          const uint32_t *src);                        \
+                                                                                       \
+void                                                                                   \
+cputype##_write_back_##name (pixman_iter_t *iter)                                      \
+{                                                                                      \
+    pixman_write_back_##name##_asm_##cputype (iter->width,                             \
+                                              (uint32_t *)(iter->bits - iter->stride), \
+                                              iter->buffer);                           \
+}
+
+#define PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER(cputype, format)      \
+    { PIXMAN_ ## format,                                             \
+      (FAST_PATH_STANDARD_FLAGS             |                        \
+       FAST_PATH_ID_TRANSFORM               |                        \
+       FAST_PATH_SAMPLES_COVER_CLIP_NEAREST |                        \
+       FAST_PATH_BITS_IMAGE),                                        \
+      ITER_NARROW | ITER_SRC,                                        \
+      _pixman_iter_init_bits_stride,                                 \
+      cputype ## _get_scanline_ ## format,                           \
+      NULL                                                           \
+    }
+
+#define PIXMAN_ARM_WRITEBACK(cputype, format)                        \
+    { PIXMAN_ ## format,                                             \
+      FAST_PATH_STD_DEST_FLAGS,                                      \
+      ITER_NARROW | ITER_DEST | ITER_IGNORE_RGB | ITER_IGNORE_ALPHA, \
+      _pixman_iter_init_bits_stride,                                 \
+      fast_dest_fetch_noop,                                          \
+      cputype ## _write_back_ ## format                              \
+    },                                                               \
+                                                                     \
+    { PIXMAN_ ## format,                                             \
+      FAST_PATH_STD_DEST_FLAGS,                                      \
+      ITER_NARROW | ITER_DEST,                                       \
+      _pixman_iter_init_bits_stride,                                 \
+      cputype ## _get_scanline_ ## format,                           \
+      cputype ## _write_back_ ## format                              \
+    }
+
 #endif
