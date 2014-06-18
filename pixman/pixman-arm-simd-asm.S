@@ -2803,6 +2803,16 @@ generate_composite_function_single_scanline \
  .endif
 .endm
 
+generate_composite_function \
+    pixman_composite_src_1555_8888_asm_armv6, 16, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER, \
+    3, /* prefetch distance */ \
+    src_1555_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    src_1555_8888_process_head, \
+    src_1555_8888_process_tail
+
 generate_composite_function_single_scanline \
     pixman_get_scanline_a1r5g5b5_asm_armv6, 16, 0, 32, \
     FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER, \
