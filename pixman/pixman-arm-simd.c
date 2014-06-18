@@ -100,6 +100,7 @@ PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, r5g6b5)
 PIXMAN_ARM_BIND_WRITE_BACK   (armv6, r5g6b5)
+PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a1r5g5b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a8)
 
 static uint32_t *
@@ -322,6 +323,8 @@ static const pixman_iter_info_t arm_simd_iters[] =
 {
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, r5g6b5),
     PIXMAN_ARM_WRITEBACK (armv6, r5g6b5),
+
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, a1r5g5b5),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, a8),
 
