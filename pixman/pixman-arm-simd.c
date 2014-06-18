@@ -98,6 +98,7 @@ PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, r5g6b5)
 PIXMAN_ARM_BIND_WRITE_BACK   (armv6, r5g6b5)
+PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a1r5g5b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a8)
 
 static uint32_t *
@@ -339,6 +340,17 @@ static const pixman_iter_info_t arm_simd_iters[] =
       _pixman_iter_init_bits_stride,
       fast_dest_fetch_noop,
       armv6_write_back_r5g6b5
+    },
+
+    { PIXMAN_a1r5g5b5,
+      (FAST_PATH_STANDARD_FLAGS             |
+       FAST_PATH_ID_TRANSFORM               |
+       FAST_PATH_SAMPLES_COVER_CLIP_NEAREST |
+       FAST_PATH_BITS_IMAGE),
+      ITER_NARROW | ITER_SRC,
+      _pixman_iter_init_bits_stride,
+      armv6_get_scanline_a1r5g5b5,
+      NULL
     },
 
     { PIXMAN_a8,

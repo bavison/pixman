@@ -2191,3 +2191,73 @@ generate_composite_function_single_scanline \
     inout_reverse_process_tail
 
 /******************************************************************************/
+
+.macro src_1555_8888_init
+        /* Hold loop invariant in MASK */
+        ldr     MASK, =0x83E083E0
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+.endm
+
+.macro src_1555_8888_2pixels  reg1, reg2, tmp1, tmp2, mask
+        bic     WK&reg2, WK&reg1, mask              @ 0RRRRR00000BBBBB0rrrrr00000bbbbb
+        and     tmp1, WK&reg1, mask                 @ A00000GGGGG00000a00000ggggg00000
+        mov     tmp2, WK&reg2, lsr #16              @ 00000000000000000RRRRR00000BBBBB
+        orr     tmp1, tmp1, tmp1, lsr #5            @ A0000-GGGGGGGGGGa0000-gggggggggg
+        uxth    WK&reg2, WK&reg2                    @ 00000000000000000rrrrr00000bbbbb
+        mov     WK&reg1, tmp1, lsl #16              @ a0000-gggggggggg0000000000000000
+        orr     tmp2, tmp2, tmp2, lsl #5            @ 000000000000RRRRRRRRRRBBBBBBBBBB
+        orr     WK&reg2, WK&reg2, WK&reg2, lsl #5   @ 000000000000rrrrrrrrrrbbbbbbbbbb
+        mov     tmp1, tmp1, asr #10                 @ AAAAAAAAAAA0000-GGGGGGGGGG------
+        pkhbt   tmp2, tmp2, tmp2, lsl #4            @ 00000000RRRRRRRR------BBBBBBBBBB
+        pkhbt   WK&reg2, WK&reg2, WK&reg2, lsl #4   @ 00000000rrrrrrrr------bbbbbbbbbb
+        mov     WK&reg1, WK&reg1, asr #10           @ aaaaaaaaaaa0000-gggggggggg000000
+        pkhtb   tmp2, tmp2, tmp2, asr #2            @ 00000000RRRRRRRR--------BBBBBBBB
+        pkhtb   WK&reg2, WK&reg2, WK&reg2, asr #2   @ 00000000rrrrrrrr--------bbbbbbbb
+        sel     WK&reg1, WK&reg2, WK&reg1           @ aaaaaaaarrrrrrrrggggggggbbbbbbbb
+        sel     WK&reg2, tmp2, tmp1                 @ AAAAAAAARRRRRRRRGGGGGGGGBBBBBBBB
+.endm
+
+.macro src_1555_8888_1pixel  reg, tmp, mask
+        bic     tmp, WK&reg, mask                   @ 00000000000000000rrrrr00000bbbbb
+        and     WK&reg, mask, WK&reg, lsl #16       @ a00000ggggg000000000000000000000
+        orr     tmp, tmp, tmp, lsl #5               @ 000000000000rrrrrrrrrrbbbbbbbbbb
+        orr     WK&reg, WK&reg, lsr #5              @ a0000-gggggggggg0000000000000000
+        pkhbt   tmp, tmp, tmp, lsl #4               @ 00000000rrrrrrrr------bbbbbbbbbb
+        mov     WK&reg, WK&reg, asr #10             @ aaaaaaaaaaa0000-gggggggggg000000
+        pkhtb   tmp, tmp, tmp, asr #2               @ 00000000rrrrrrrr--------bbbbbbbb
+        sel     WK&reg, tmp, WK&reg                 @ aaaaaaaarrrrrrrrggggggggbbbbbbbb
+.endm
+
+.macro src_1555_8888_process_head   cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        pixldst ld,, 8, firstreg, %(firstreg+2),,, SRC, unaligned_src
+ .elseif numbytes == 8
+        pixld   , 4, firstreg, SRC, unaligned_src
+ .elseif numbytes == 4
+        pixld   , 2, firstreg, SRC, unaligned_src
+ .endif
+.endm
+
+.macro src_1555_8888_process_tail   cond, numbytes, firstreg
+ .if numbytes == 16
+        src_1555_8888_2pixels firstreg, %(firstreg+1), STRIDE_M, SCRATCH, MASK
+        src_1555_8888_2pixels %(firstreg+2), %(firstreg+3), STRIDE_M, SCRATCH, MASK
+ .elseif numbytes == 8
+        src_1555_8888_2pixels firstreg, %(firstreg+1), STRIDE_M, SCRATCH, MASK
+ .else
+        src_1555_8888_1pixel firstreg, SCRATCH, MASK
+ .endif
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_get_scanline_a1r5g5b5_asm_armv6, 16, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER, \
+    3, /* prefetch distance */ \
+    src_1555_8888_init, \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    src_1555_8888_process_head, \
+    src_1555_8888_process_tail
+
+/******************************************************************************/
