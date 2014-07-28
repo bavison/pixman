@@ -159,10 +159,10 @@ general_composite_rect  (pixman_implementation_t *imp,
     mask_buffer = ALIGN (src_buffer + width * Bpp);
     dest_buffer = ALIGN (mask_buffer + width * Bpp);
 
-    if (ALIGN (dest_buffer + width * Bpp) >
+    if (dest_buffer + width * Bpp >
 	    scanline_buffer + sizeof (stack_scanline_buffer))
     {
-	scanline_buffer = pixman_malloc_ab_plus_c (width, Bpp * 3, 32 * 3);
+	scanline_buffer = pixman_malloc_ab_plus_c (width, Bpp * 3, 15 * 3);
 
 	if (!scanline_buffer)
 	    return;
