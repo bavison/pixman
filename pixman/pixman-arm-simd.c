@@ -124,6 +124,23 @@ fast_dest_fetch_noop (pixman_iter_t *iter, const uint32_t *mask)
     return iter->buffer;
 }
 
+#define DECLARE_NEAREST_SCALED_SCANLINE_FUNCTION(cputype, name, alias, type)   \
+void                                                                           \
+pixman_get_scanline_nearest_scaled_cover_##name##_asm_##cputype (              \
+                                                 int32_t         width,        \
+                                                 pixman_fixed_t  x,            \
+                                                 pixman_fixed_t  ux,           \
+                                                 uint32_t       *dest,         \
+                                                 const type     *source,       \
+                                                 const uint32_t *mask);
+
+#define CALL_NEAREST_SCALED_SCANLINE_FUNCTION(                                 \
+        cputype, name, alias, width, x, ux, dest, source, mask, source_width)  \
+    pixman_get_scanline_nearest_scaled_cover_##name##_asm_##cputype (          \
+        width, x, ux, dest, source, mask);
+
+PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, 8888, uint32_t)
+
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
                                        int32_t   h,
@@ -353,6 +370,8 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
 
 static const pixman_iter_info_t arm_simd_iters[] =
 {
+    PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (armv6, a8r8g8b8),
+
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, x8r8g8b8),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, r5g6b5),
