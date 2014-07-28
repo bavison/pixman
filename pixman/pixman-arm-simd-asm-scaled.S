@@ -38,6 +38,7 @@
 	.p2align 2
 
 #include "pixman-arm-asm.h"
+#include "pixman-arm-simd-asm-scaled.h"
 
 /*
  * Note: This code is only using armv5te instructions (not even armv6),
@@ -154,3 +155,11 @@ generate_nearest_scanline_func \
 
 generate_nearest_scanline_func \
     pixman_scaled_nearest_scanline_8888_8888_SRC_asm_armv6, 2,  , 48, 32
+
+/******************************************************************************/
+
+generate_nearest_scaled_cover_function \
+    pixman_get_scanline_nearest_scaled_cover_a8r8g8b8_asm_armv6, 32, \
+    3, 3 /* prefetch distances */, nop_macro, nop_macro
+
+/******************************************************************************/

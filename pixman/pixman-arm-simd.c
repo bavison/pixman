@@ -108,6 +108,68 @@ fast_dest_fetch_noop (pixman_iter_t *iter, const uint32_t *mask)
     return iter->buffer;
 }
 
+#define PIXMAN_IMAGE_GET_SCALED(image, unscaled_x, unscaled_y, type, stride, out_bits, scaled_x, scaled_y, uxx, uxy, uyy) \
+    do                                                                                           \
+    {                                                                                            \
+        pixman_image_t  *__image__      = (image);                                               \
+        pixman_fixed_t   __offset__     = pixman_int_to_fixed (unscaled_x) + pixman_fixed_1 / 2; \
+        pixman_fixed_t   __line__       = pixman_int_to_fixed (unscaled_y) + pixman_fixed_1 / 2; \
+        pixman_fixed_t   __x__, __y__;                                                           \
+        int64_t          __x64__, __y64__;                                                       \
+        pixman_fixed_t (*__matrix__)[3] = __image__->common.transform->matrix;                   \
+                                                                                                 \
+        __x64__  = (int64_t) __matrix__[0][0] * (__offset__ & 0xFFFF);                           \
+        __x64__ += (int64_t) __matrix__[0][1] * (__line__ & 0xFFFF);                             \
+        __x__    = (__x64__ + 0x8000) >> 16;                                                     \
+        __x__   += __matrix__[0][0] * (__offset__ >> 16);                                        \
+        __x__   += __matrix__[0][1] * (__line__ >> 16);                                          \
+        __x__   += __matrix__[0][2];                                                             \
+        __y64__  = (int64_t) __matrix__[1][1] * (__line__ & 0xFFFF);                             \
+        __y__    = (__y64__ + 0x8000) >> 16;                                                     \
+        __y__   += __matrix__[1][1] * (__line__ >> 16);                                          \
+        __y__   += __matrix__[1][2];                                                             \
+                                                                                                 \
+        (stride)   = __image__->bits.rowstride * (int) sizeof (uint32_t) / (int) sizeof (type);  \
+        (out_bits) = (type *)__image__->bits.bits;                                               \
+        (scaled_x) = __x__;                                                                      \
+        (scaled_y) = __y__;                                                                      \
+        (uxx)      = __matrix__[0][0];                                                           \
+        (uxy)      = __matrix__[0][1];                                                           \
+        (uyy)      = __matrix__[1][1];                                                           \
+    } while (0)
+
+#define BIND_GET_SCANLINE_NEAREST_SCALED_COVER(cputype, name, type)         \
+void                                                                        \
+pixman_get_scanline_nearest_scaled_cover_##name##_asm_##cputype (           \
+                                                  uint32_t        width,    \
+                                                  pixman_fixed_t  x,        \
+                                                  pixman_fixed_t  ux,       \
+                                                  uint32_t       *dest,     \
+                                                  const type     *source,   \
+                                                  const uint32_t *mask);    \
+                                                                            \
+static uint32_t *                                                           \
+cputype##_get_scanline_nearest_scaled_cover_##name (pixman_iter_t  *iter,   \
+                                                    const uint32_t *mask)   \
+{                                                                           \
+    int            stride;                                                  \
+    type          *bits, *src;                                              \
+    pixman_fixed_t x, y, uxx, uxy, uyy;                                     \
+                                                                            \
+    PIXMAN_IMAGE_GET_SCALED (iter->image, iter->x, iter->y++, type,         \
+                             stride, bits, x, y, uxx, uxy, uyy);            \
+                                                                            \
+    (void) uxy;                                                             \
+    (void) uyy;                                                             \
+    src = bits + stride * pixman_fixed_to_int (y - pixman_fixed_e);         \
+    pixman_get_scanline_nearest_scaled_cover_##name##_asm_##cputype (       \
+            iter->width, x - pixman_fixed_e, uxx, iter->buffer, src, mask); \
+                                                                            \
+    return iter->buffer;                                                    \
+}
+
+BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, uint32_t)
+
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
                                        int32_t   h,
@@ -315,6 +377,14 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
 
 static const pixman_iter_info_t arm_simd_iters[] =
 {
+    { PIXMAN_a8r8g8b8,
+      PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS,
+      ITER_NARROW | ITER_SRC,
+      NULL,
+      armv6_get_scanline_nearest_scaled_cover_a8r8g8b8,
+      NULL
+    },
+
     { PIXMAN_r5g6b5,
       (FAST_PATH_STANDARD_FLAGS             |
        FAST_PATH_ID_TRANSFORM               |
