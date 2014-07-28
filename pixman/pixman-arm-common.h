@@ -446,6 +446,90 @@ cputype##_combine_##name##_u (pixman_implementation_t *imp,                   \
 
 /*****************************************************************************/
 
+/* Support for nearest scaled fetchers and fast paths */
+
+#define PIXMAN_ARM_IMAGE_GET_SCALED(image, unscaled_x, unscaled_y, type, stride, out_bits, scaled_x, scaled_y, uxx, uxy, uyy) \
+    do                                                                                           \
+    {                                                                                            \
+        pixman_image_t  *__image__      = (image);                                               \
+        pixman_fixed_t   __offset__     = pixman_int_to_fixed (unscaled_x) + pixman_fixed_1 / 2; \
+        pixman_fixed_t   __line__       = pixman_int_to_fixed (unscaled_y) + pixman_fixed_1 / 2; \
+        pixman_fixed_t   __x__, __y__;                                                           \
+        int64_t          __x64__, __y64__;                                                       \
+        pixman_fixed_t (*__matrix__)[3] = __image__->common.transform->matrix;                   \
+                                                                                                 \
+        __x64__  = (int64_t) __matrix__[0][0] * (__offset__ & 0xFFFF);                           \
+        __x64__ += (int64_t) __matrix__[0][1] * (__line__ & 0xFFFF);                             \
+        __x__    = (__x64__ + 0x8000) >> 16;                                                     \
+        __x__   += __matrix__[0][0] * (__offset__ >> 16);                                        \
+        __x__   += __matrix__[0][1] * (__line__ >> 16);                                          \
+        __x__   += __matrix__[0][2];                                                             \
+        __y64__  = (int64_t) __matrix__[1][1] * (__line__ & 0xFFFF);                             \
+        __y__    = (__y64__ + 0x8000) >> 16;                                                     \
+        __y__   += __matrix__[1][1] * (__line__ >> 16);                                          \
+        __y__   += __matrix__[1][2];                                                             \
+                                                                                                 \
+        (stride)   = __image__->bits.rowstride * (int) sizeof (uint32_t) / (int) sizeof (type);  \
+        (out_bits) = (type *)__image__->bits.bits;                                               \
+        (scaled_x) = __x__;                                                                      \
+        (scaled_y) = __y__;                                                                      \
+        (uxx)      = __matrix__[0][0];                                                           \
+        (uxy)      = __matrix__[0][1];                                                           \
+        (uyy)      = __matrix__[1][1];                                                           \
+    } while (0)
+
+#define PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER(cputype, name, alias, type)  \
+                                                                            \
+DECLARE_NEAREST_SCALED_SCANLINE_FUNCTION (cputype, name, alias, type)       \
+                                                                            \
+static uint32_t *                                                           \
+cputype##_get_scanline_nearest_scaled_cover_##name (pixman_iter_t  *iter,   \
+                                                    const uint32_t *mask)   \
+{                                                                           \
+    int            stride;                                                  \
+    type          *bits, *source;                                           \
+    pixman_fixed_t x, y, uxx, uxy, uyy;                                     \
+                                                                            \
+    PIXMAN_ARM_IMAGE_GET_SCALED (iter->image, iter->x, iter->y++, type,     \
+                                 stride, bits, x, y, uxx, uxy, uyy);        \
+                                                                            \
+    (void) uxy;                                                             \
+    (void) uyy;                                                             \
+    source = bits + stride * pixman_fixed_to_int (y - pixman_fixed_e);      \
+                                                                            \
+    CALL_NEAREST_SCALED_SCANLINE_FUNCTION (                                 \
+            cputype, name, alias,                                           \
+            iter->width, x - pixman_fixed_e, uxx,                           \
+            iter->buffer, source, mask, iter->image->bits.width);           \
+                                                                            \
+    return iter->buffer;                                                    \
+}
+
+#define PIXMAN_ARM_NEAREST_AFFINE_FLAGS                                 \
+    (FAST_PATH_NO_ALPHA_MAP             |                               \
+     FAST_PATH_NO_ACCESSORS             |                               \
+     FAST_PATH_NARROW_FORMAT            |                               \
+     FAST_PATH_NEAREST_FILTER           |                               \
+     FAST_PATH_HAS_TRANSFORM            |                               \
+     FAST_PATH_AFFINE_TRANSFORM)
+
+#define PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS                           \
+    (PIXMAN_ARM_NEAREST_AFFINE_FLAGS      |                             \
+     FAST_PATH_SAMPLES_COVER_CLIP_NEAREST |                             \
+     FAST_PATH_X_UNIT_POSITIVE            |                             \
+     FAST_PATH_Y_UNIT_ZERO)
+
+#define PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER(cputype, format)               \
+    { PIXMAN_ ## format,                                                       \
+      PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS,                                   \
+      ITER_NARROW | ITER_SRC,                                                  \
+      NULL,                                                                    \
+      cputype ## _get_scanline_nearest_scaled_cover_ ## format,                \
+      NULL                                                                     \
+    }
+
+/*****************************************************************************/
+
 /* Support for untransformed fetchers and writeback */
 
 #define PIXMAN_ARM_BIND_GET_SCANLINE(cputype, name)                         \
