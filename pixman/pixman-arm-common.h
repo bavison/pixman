@@ -469,6 +469,15 @@ cputype##_combine_##name##_u (pixman_implementation_t *imp,                   \
      FAST_PATH_X_UNIT_POSITIVE            |                             \
      FAST_PATH_Y_UNIT_ZERO)
 
+#define PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH(cputype,op,s,d,func) \
+    {   PIXMAN_OP_ ## op,                                                      \
+        PIXMAN_ ## s,                                                          \
+        PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS,                                 \
+        PIXMAN_null, 0,                                                        \
+        PIXMAN_ ## d, FAST_PATH_STD_DEST_FLAGS,                                \
+        cputype ## _composite_nearest_scaled_cover_ ## func                    \
+    }
+
 #define PIXMAN_ARM_BIND_GET_SCANLINE(cputype, name)                         \
 void                                                                        \
 pixman_get_scanline_##name##_asm_##cputype (int32_t        w,               \
