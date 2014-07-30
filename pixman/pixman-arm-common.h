@@ -528,6 +528,15 @@ cputype##_get_scanline_nearest_scaled_cover_##name (pixman_iter_t  *iter,   \
       NULL                                                                     \
     }
 
+#define PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH(cputype,op,s,d,func) \
+    {   PIXMAN_OP_ ## op,                                                      \
+        PIXMAN_ ## s,                                                          \
+        PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS,                                 \
+        PIXMAN_null, 0,                                                        \
+        PIXMAN_ ## d, FAST_PATH_STD_DEST_FLAGS,                                \
+        cputype ## _composite_nearest_scaled_cover_ ## func                    \
+    }
+
 /*****************************************************************************/
 
 /* Support for untransformed fetchers and writeback */
