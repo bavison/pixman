@@ -27,9 +27,15 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
 #include "pixman-private.h"
 #include "pixman-arm-common.h"
 #include "pixman-inlines.h"
+
+#define SCANLINE_BUFFER_LENGTH 8192
+
+#define ALIGN(addr)                                                     \
+    ((uint8_t *)((((uintptr_t)(addr)) + 15) & (~15)))
 
 PIXMAN_ARM_BIND_FAST_PATH_SRC_DST (armv6, src_8888_8888,
 		                   uint32_t, 1, uint32_t, 1)
@@ -83,6 +89,8 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 0565_0565, SRC,
 PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 8888_8888, SRC,
                                         uint32_t, uint32_t)
 
+#define pixman_composite_scanline_src_asm_armv6(w, dst, src) do { (void)(w); (void)(dst); (void)(src); } while (0)
+
 void
 pixman_composite_scanline_src_mask_asm_armv6 (int32_t         w,
                                               uint32_t       *dst,
@@ -111,6 +119,8 @@ PIXMAN_ARM_BIND_COMBINE_U (armv6, out)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, out_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
+#define pixman_get_scanline_a8r8g8b8_asm_armv6(w, dst, src) do { (void)(w); (void)(dst); (void)(src); } while (0)
+#define pixman_write_back_a8r8g8b8_asm_armv6(w, dst, src)   do { (void)(w); (void)(dst); (void)(src); } while (0)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, r5g6b5)
 PIXMAN_ARM_BIND_WRITE_BACK   (armv6, r5g6b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a1r5g5b5)
@@ -180,6 +190,85 @@ BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, x8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, r5g6b5,   uint16_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8,       uint8_t)
+
+#define NEAREST_SCALED_COVER_USES_SRC_BUFFER(op, src_format, dst_format) \
+    (PIXMAN_OP_##op != PIXMAN_OP_SRC ||                                  \
+     (PIXMAN_##dst_format != PIXMAN_a8r8g8b8 &&                          \
+      (PIXMAN_##src_format != PIXMAN_r5g6b5 || PIXMAN_##dst_format != PIXMAN_r5g6b5)))
+
+#define NEAREST_SCALED_COVER_USES_DST_BUFFER(op, dst_format) \
+    (PIXMAN_OP_##op != PIXMAN_OP_SRC && PIXMAN_##dst_format != PIXMAN_a8r8g8b8)
+
+#define BIND_NEAREST_SCALED_COVER_FAST_PATH_SRC_DST(cputype, name, OP, op, src_type, dst_type, src_format, dst_format) \
+static void                                                                                                 \
+cputype##_composite_nearest_scaled_cover_##name (pixman_implementation_t *imp,                              \
+                                                 pixman_composite_info_t *info)                             \
+{                                                                                                           \
+    uint8_t        stack_scanline_buffer[SCANLINE_BUFFER_LENGTH];                                           \
+    uint8_t       *scanline_buffer = stack_scanline_buffer;                                                 \
+    PIXMAN_COMPOSITE_ARGS (info);                                                                           \
+    dst_type      *dst_line, *dst;                                                                          \
+    src_type      *src_bits, *src;                                                                          \
+    uint32_t      *end_of_buffer, *dst_buffer, *src_buffer;                                                 \
+    int            dst_stride, src_stride;                                                                  \
+    pixman_fixed_t x, y, uxx, uxy, uyy;                                                                     \
+                                                                                                            \
+    end_of_buffer = dst_buffer = src_buffer = (uint32_t *) ALIGN (scanline_buffer);                         \
+    if (NEAREST_SCALED_COVER_USES_SRC_BUFFER (OP, src_format, dst_format))                                  \
+        end_of_buffer = dst_buffer = (uint32_t *) ALIGN (src_buffer + width);                               \
+    if (NEAREST_SCALED_COVER_USES_DST_BUFFER (OP, dst_format))                                              \
+        end_of_buffer = dst_buffer + width;                                                                 \
+    if (NEAREST_SCALED_COVER_USES_SRC_BUFFER (OP, src_format, dst_format) &&                                \
+        (uint8_t *) end_of_buffer > scanline_buffer + sizeof stack_scanline_buffer)                         \
+    {                                                                                                       \
+        scanline_buffer = pixman_malloc_ab_plus_c (end_of_buffer - src_buffer, sizeof (uint32_t), 15);      \
+                                                                                                            \
+        if (!scanline_buffer)                                                                               \
+            return;                                                                                         \
+                                                                                                            \
+        src_buffer = (uint32_t *) ALIGN (scanline_buffer);                                                  \
+        dst_buffer = (uint32_t *) ALIGN (src_buffer + width);                                               \
+    }                                                                                                       \
+                                                                                                            \
+    PIXMAN_IMAGE_GET_SCALED (src_image, src_x, src_y, src_type, src_stride, src_bits, x, y, uxx, uxy, uyy); \
+    PIXMAN_IMAGE_GET_LINE (dest_image, dest_x, dest_y, dst_type, dst_stride, dst_line, 1);                  \
+                                                                                                            \
+    while (height--)                                                                                        \
+    {                                                                                                       \
+        dst = dst_line;                                                                                     \
+        dst_line += dst_stride;                                                                             \
+        src = src_bits + src_stride * pixman_fixed_to_int (y - pixman_fixed_e);                             \
+        if (PIXMAN_OP_##OP == PIXMAN_OP_SRC &&                                                              \
+            PIXMAN_##src_format == PIXMAN_r5g6b5 &&                                                         \
+            PIXMAN_##dst_format == PIXMAN_r5g6b5)                                                           \
+            pixman_get_scanline_r5g6b5_nearest_scaled_cover_r5g6b5_asm_##cputype (                          \
+                    width, x - pixman_fixed_e, uxx, (uint16_t *) dst, (uint16_t *) src);                    \
+        else if (NEAREST_SCALED_COVER_USES_SRC_BUFFER (OP, src_format, dst_format))                         \
+            pixman_get_scanline_nearest_scaled_cover_##src_format##_asm_##cputype (                         \
+                    width, x - pixman_fixed_e, uxx, src_buffer, src, NULL);                                 \
+        else                                                                                                \
+            pixman_get_scanline_nearest_scaled_cover_##src_format##_asm_##cputype (                         \
+                    width, x - pixman_fixed_e, uxx, (uint32_t *) dst, src, NULL);                           \
+        if (NEAREST_SCALED_COVER_USES_DST_BUFFER (OP, dst_format))                                          \
+        {                                                                                                   \
+            pixman_get_scanline_##dst_format##_asm_##cputype (width, dst_buffer, (uint32_t *) dst);         \
+            pixman_composite_scanline_##op##_asm_##cputype (width, dst_buffer, src_buffer);                 \
+            pixman_write_back_##dst_format##_asm_##cputype (width, (uint32_t *) dst, dst_buffer);           \
+        }                                                                                                   \
+        else if (PIXMAN_OP_##OP != PIXMAN_OP_SRC)                                                           \
+            pixman_composite_scanline_##op##_asm_##cputype (width, (uint32_t *) dst, src_buffer);           \
+        else if (NEAREST_SCALED_COVER_USES_SRC_BUFFER (OP, src_format, dst_format))                         \
+            pixman_write_back_##dst_format##_asm_##cputype (width, (uint32_t *) dst, src_buffer);           \
+        x += uxy;                                                                                           \
+        y += uyy;                                                                                           \
+    }                                                                                                       \
+                                                                                                            \
+    if (NEAREST_SCALED_COVER_USES_SRC_BUFFER (OP, src_format, dst_format) &&                                \
+        scanline_buffer != stack_scanline_buffer)                                                           \
+        free (scanline_buffer);                                                                             \
+}
+
+BIND_NEAREST_SCALED_COVER_FAST_PATH_SRC_DST (armv6, src_8888_8888,  SRC,  src,  uint32_t, uint32_t, a8r8g8b8, a8r8g8b8)
 
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
@@ -389,6 +478,13 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8r8g8b8, x8r8g8b8, armv6_composite_over_n_8888_8888_ca),
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8b8g8r8, a8b8g8r8, armv6_composite_over_n_8888_8888_ca),
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8b8g8r8, x8b8g8r8, armv6_composite_over_n_8888_8888_ca),
+
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8r8g8b8, a8r8g8b8, src_8888_8888),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8r8g8b8, x8r8g8b8, src_8888_8888),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, x8r8g8b8, x8r8g8b8, src_8888_8888),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8b8g8r8, a8b8g8r8, src_8888_8888),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8b8g8r8, x8b8g8r8, src_8888_8888),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, x8b8g8r8, x8b8g8r8, src_8888_8888),
 
     PIXMAN_ARM_SIMPLE_NEAREST_FAST_PATH (SRC, r5g6b5, r5g6b5, armv6_0565_0565),
     PIXMAN_ARM_SIMPLE_NEAREST_FAST_PATH (SRC, b5g6r5, b5g6r5, armv6_0565_0565),
