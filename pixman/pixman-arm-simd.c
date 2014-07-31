@@ -230,7 +230,15 @@ cputype##_composite_nearest_scaled_cover_##name (pixman_implementation_t *imp,  
         free (scanline_buffer);                                                                             \
 }
 
+void
+pixman_get_scanline_r5g6b5_nearest_scaled_cover_r5g6b5_asm_armv6(uint32_t        width,
+                                                                 pixman_fixed_t  x,
+                                                                 pixman_fixed_t  ux,
+                                                                 uint16_t       *dest,
+                                                                 const uint16_t *source);
+
 BIND_NEAREST_SCALED_COVER_FAST_PATH_SRC_DST (armv6, src_8888_8888,  SRC,  src,  uint32_t, uint32_t, a8r8g8b8, a8r8g8b8)
+BIND_NEAREST_SCALED_COVER_FAST_PATH_SRC_DST (armv6, src_0565_0565,  SRC,  src,  uint16_t, uint16_t, r5g6b5,   r5g6b5)
 
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
@@ -445,6 +453,9 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8r8g8b8, x8r8g8b8, armv6_composite_over_n_8888_8888_ca),
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8b8g8r8, a8b8g8r8, armv6_composite_over_n_8888_8888_ca),
     PIXMAN_STD_FAST_PATH_CA (OVER, solid, a8b8g8r8, x8b8g8r8, armv6_composite_over_n_8888_8888_ca),
+
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, r5g6b5, r5g6b5, src_0565_0565),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, b5g6r5, b5g6r5, src_0565_0565),
 
     PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8r8g8b8, a8r8g8b8, src_8888_8888),
     PIXMAN_ARM_NEAREST_SCALED_COVER_SRC_DST_FAST_PATH (armv6, SRC, a8r8g8b8, x8r8g8b8, src_8888_8888),
