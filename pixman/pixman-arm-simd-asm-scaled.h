@@ -92,7 +92,12 @@
 
 .macro nearest_scaled_cover_enlarge_nomask_innerloop  bpp, reg, convert, mask_hint, may_be_final, exit_label, store
         adds    ACCUM, ACCUM, UX
+ .if PIXEL_MERGE_OFFSET == 0
         mov     \reg, PIXEL
+ .else
+        orr     \reg, \reg, PIXEL, lsl #PIXEL_MERGE_OFFSET
+ .endif
+ .set PIXEL_MERGE_OFFSET, (PIXEL_MERGE_OFFSET + out_bpp) & 31
         \store
         branch  cc, \exit_label, 1203f
  .ifnc "\may_be_final",""
@@ -156,10 +161,20 @@
         mov     TMP, XHI
         adds    XLO, XLO, UX, lsl #16
         adc     XHI, XHI, UX, lsr #16
+ .if PIXEL_MERGE_OFFSET == 0
         ldrx    \bpp,, <\reg, [PTR]>
+ .else
+        ldrx    \bpp,, <PIXEL2, [PTR]>
+ .endif
         eor     TMP, TMP, XHI
         bics    TMP, TMP, #255/\bpp
+ .if PIXEL_MERGE_OFFSET == 0
         \convert \reg, TMP
+ .else
+        \convert PIXEL2, TMP
+        orr     \reg, \reg, PIXEL2, lsl #PIXEL_MERGE_OFFSET
+ .endif
+ .set PIXEL_MERGE_OFFSET, (PIXEL_MERGE_OFFSET + out_bpp) & 31
         \store
         branch  eq, \exit_label, 1403f
         subs    PLDS, PLDS, #32
@@ -183,7 +198,14 @@
         \inner_loop  \bpp, WK0, \convert, mask_is_0, 1, 1503f, <add DST, DST, #4>
         b       1503f
  .endif
+ .set PIXEL_MERGE_OFFSET, 0
+ .if out_bpp == 32
 1502:   \inner_loop  \bpp, WK0, \convert, mask_is_non_0, 1,, <str WK0, [DST], #4>
+ .elseif out_bpp == 16
+1502:   \inner_loop  \bpp, WK0, \convert, mask_is_non_0, 1,, <strh WK0, [DST], #2>
+ .else
+        .error  "Output bits per pixel not supported"
+ .endif
 1503:
 .endm
 
@@ -204,15 +226,26 @@
         \inner_loop  \bpp, WK3, \convert, mask_is_0, 1, 1602f, <add DST, DST, #4*4>
         b       1602f
  .endif
-1601:   \inner_loop  \bpp, WK0, \convert
+1601:
+ .set PIXEL_MERGE_OFFSET, 0
+ .rept 32 / out_bpp
+        \inner_loop  \bpp, WK0, \convert
+ .endr
+ .rept 32 / out_bpp
         \inner_loop  \bpp, WK1, \convert
+ .endr
+ .rept 32 / out_bpp
         \inner_loop  \bpp, WK2, \convert
+ .endr
+ .rept 32 / out_bpp - 1
+        \inner_loop  \bpp, WK3, \convert
+ .endr
         \inner_loop  \bpp, WK3, \convert,, 1,, <stmia DST!!, {WK0,WK1,WK2,WK3}>
 1602:
 .endm
 
 .macro process  bpp, has_mask, inner_loop, convert
-        cmp     COUNT, #2 * 4 - 1 - 1   @ guaranteed at least one aligned half-cacheline output?
+        cmp     COUNT, #2 * 128 / out_bpp - 1 - 1   @ guaranteed at least one aligned half-cacheline output?
         blo     1706f
         tst     DST, #15
         beq     1702f
@@ -220,16 +253,21 @@
         sub     COUNT, COUNT, #1
         tst     DST, #15
         bne     1701b
-1702:   sub     COUNT, COUNT, #4 - 1
+1702:   sub     COUNT, COUNT, #128 / out_bpp - 1
+ .if \has_mask
         tst     MASK, #16
         beq     1704f
-1703:   process4  \bpp, \has_mask, 0, \inner_loop, \convert
-        subs    COUNT, COUNT, #4
+ .endif
+1703:
+.if \has_mask
+        process4  \bpp, \has_mask, 0, \inner_loop, \convert
+        subs    COUNT, COUNT, #128 / out_bpp
         bcc     1705f
+ .endif
 1704:   process4  \bpp, \has_mask, 1, \inner_loop, \convert
-        subs    COUNT, COUNT, #4
+        subs    COUNT, COUNT, #128 / out_bpp
         bcs     1703b
-1705:   adds    COUNT, COUNT, #4 - 1
+1705:   adds    COUNT, COUNT, #128 / out_bpp - 1
         bcc     1707f
         @ drop through...
 1706:   process1 \bpp, \has_mask, 1, \inner_loop, \convert
@@ -243,7 +281,8 @@
                                               prefetch_distance_src_, \
                                               prefetch_distance_mask_, \
                                               init, \
-                                              convert
+                                              convert, \
+                                              out_bpp_
 
 /* void fname(uint32_t width,
  *            pixman_fixed_t x,
@@ -260,6 +299,11 @@ pixman_asm_function fname
  */
  .set prefetch_distance_src,  prefetch_distance_src_
  .set prefetch_distance_mask, prefetch_distance_mask_
+ .ifc "out_bpp_",""
+  .set out_bpp, 32
+ .else
+  .set out_bpp, out_bpp_
+ .endif
 
 /*
  * Assign symbolic names to registers
@@ -271,7 +315,8 @@ XLO     .req    a2  @ reduce only
 UX      .req    a3
 DST     .req    a4
 SRC     .req    v1
-MASK    .req    v2
+MASK    .req    v2  @ only when outputing 32bpp
+PIXEL2  .req    v2  @ only when outputing <32bpp and reducing
 PLDS    .req    v3
 PIXEL   .req    v4  @ enlarge only
 XHI     .req    v4  @ reduce only
@@ -290,6 +335,7 @@ TMP     .req    lr
         blo     1807f-4
         \init
         mla     WK2, COUNT, UX, X
+ .if out_bpp == 32
         bics    WK0, MASK, #31
         beq     1801f
         @ Use a simplified preload process for the mask,
@@ -300,6 +346,7 @@ TMP     .req    lr
    .set OFFSET, OFFSET + 32
   .endr
 1801:
+ .endif
         add     WK0, SRC, X, lsr #16 - (log2_\bpp - 3)
         bic     WK0, WK0, #31
         pld     [WK0]
@@ -321,11 +368,13 @@ TMP     .req    lr
         mov     ACCUM, X, lsl #16
         mov     UX, UX, lsl #16
         bic     SRC, SRC, #(\bpp-1)/8
+ .if out_bpp == 32
         teq     MASK, #0
         beq     1804f
         mov     VALID, #0
         process \bpp, 1, nearest_scaled_cover_enlarge_mask_innerloop, \convert
 1804:
+ .endif
         ldrx    \bpp,, <PIXEL, [SRC]>
         \convert PIXEL, TMP
         process \bpp, 0, nearest_scaled_cover_enlarge_nomask_innerloop, \convert
@@ -336,9 +385,11 @@ TMP     .req    lr
         mov     XHI, X, lsr #16
         mov     XLO, X, lsl #16
         add     XHI, XHI, TMP, lsr #log2_\bpp - 3
+ .if out_bpp == 32
         teq     MASK, #0
         beq     1806f
         process \bpp, 1, nearest_scaled_cover_reduce_mask_innerloop, \convert
+ .endif
 1806:   process \bpp, 0, nearest_scaled_cover_reduce_nomask_innerloop, \convert
 1807:
 
