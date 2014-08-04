@@ -162,4 +162,24 @@ generate_nearest_scaled_cover_function \
     pixman_get_scanline_nearest_scaled_cover_a8r8g8b8_asm_armv6, 32, \
     3, 3 /* prefetch distances */, nop_macro, nop_macro
 
+.macro init_ge
+        msr     CPSR_s, #0x50000
+.endm
+
+.macro convert_0565_8888, reg, tmp
+        bic     tmp, reg, #0x07e0                  @ 0000000000000000rrrrr000000bbbbb
+        and     reg, reg, #0x07e0                  @ 000000000000000000000gggggg00000
+        mov     tmp, tmp, lsl #3                   @ 0000000000000rrrrr000000bbbbb000
+        mov     reg, reg, lsl #5                   @ 0000000000000000gggggg0000000000
+        orr     tmp, tmp, tmp, lsr #5              @ 0000000000000rrrrrrrrrr0bbbbbbbb
+        orr     reg, reg, reg, lsr #6              @ 000000000000000gggggggggggg00000
+        pkhbt   tmp, tmp, tmp, lsl #5              @ --------rrrrrrrr--------bbbbbbbb
+        sel     reg, tmp, reg                      @ --------rrrrrrrrggggggggbbbbbbbb
+        orr     reg, reg, #0xFF000000              @ 11111111rrrrrrrrggggggggbbbbbbbb
+.endm
+
+generate_nearest_scaled_cover_function \
+    pixman_get_scanline_nearest_scaled_cover_r5g6b5_asm_armv6, 16, \
+    2, 3 /* prefetch distances */, init_ge, convert_0565_8888
+
 /******************************************************************************/
