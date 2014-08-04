@@ -190,4 +190,12 @@ generate_nearest_scaled_cover_function \
     pixman_get_scanline_nearest_scaled_cover_r5g6b5_asm_armv6, 16, \
     2, 3 /* prefetch distances */, init_ge, convert_0565_8888
 
+.macro convert_8_8888, reg, tmp
+        mov     reg, reg, lsl #24
+.endm
+
+generate_nearest_scaled_cover_function \
+    pixman_get_scanline_nearest_scaled_cover_a8_asm_armv6, 8, \
+    2, 3 /* prefetch distances */, nop_macro, convert_8_8888
+
 /******************************************************************************/
