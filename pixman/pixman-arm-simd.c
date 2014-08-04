@@ -142,6 +142,7 @@ pixman_get_scanline_nearest_scaled_cover_##name##_asm_##cputype (              \
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, 8888, uint32_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, x8r8g8b8, x888, uint32_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, r5g6b5,   0565, uint16_t)
+PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8,       8,    uint8_t)
 
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
@@ -384,6 +385,7 @@ static const pixman_iter_info_t arm_simd_iters[] =
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, a1r5g5b5),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, a8),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (armv6, a8),
 
     { PIXMAN_null },
 };
