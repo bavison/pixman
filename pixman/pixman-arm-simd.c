@@ -179,6 +179,7 @@ cputype##_get_scanline_nearest_scaled_cover_##name (pixman_iter_t  *iter,   \
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, x8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, r5g6b5,   uint16_t)
+BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8,       uint8_t)
 
 void
 pixman_composite_src_n_8888_asm_armv6 (int32_t   w,
@@ -472,6 +473,14 @@ static const pixman_iter_info_t arm_simd_iters[] =
       ITER_NARROW | ITER_SRC,
       _pixman_iter_init_bits_stride,
       armv6_get_scanline_a8,
+      NULL
+    },
+
+    { PIXMAN_a8,
+      PIXMAN_ARM_NEAREST_SCALED_COVER_FLAGS,
+      ITER_NARROW | ITER_SRC,
+      NULL,
+      armv6_get_scanline_nearest_scaled_cover_a8,
       NULL
     },
 
