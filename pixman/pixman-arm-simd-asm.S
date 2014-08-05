@@ -212,6 +212,92 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro src_8888_8888_8888_init
+        /* Set GE[3:0] to 0101 so SEL instructions do what we want */
+        msr     CPSR_s, #0x50000
+        /* Point at alpha byte in mask */
+        add     MASK, MASK, #3
+        line_saved_regs STRIDE_D, STRIDE_S, STRIDE_M, ORIG_W
+.endm
+
+.macro src_8888_8888_8888_newline
+        ldr     STRIDE_D, =0x00800080
+.endm
+
+.macro src_8888_8888_8888_1pixel  s, m, d, tmp, half
+        uxtb16  tmp, s
+        uxtb16  s, s, ror #8
+        mla     tmp, tmp, m, half
+        mla     s, s, m, half
+        uxtab16 tmp, tmp, tmp, ror #8
+        uxtab16 s, s, s, ror #8
+        mov     tmp, tmp, ror #8
+        sel     d, tmp, s
+.endm
+
+.macro src_8888_8888_8888_2pixels  s0, s1, m0, m1, d0, d1, tmp0, tmp1, half
+        uxtb16  tmp0, s0
+        uxtb16  s0, s0, ror #8
+        uxtb16  tmp1, s1
+        uxtb16  s1, s1, ror #8
+        mla     tmp0, tmp0, m0, half
+        mla     s0, s0, m0, half
+        mla     tmp1, tmp1, m1, half
+        mla     s1, s1, m1, half
+        uxtab16 tmp0, tmp0, tmp0, ror #8
+        uxtab16 s0, s0, s0, ror #8
+        uxtab16 tmp1, tmp1, tmp1, ror #8
+        uxtab16 s1, s1, s1, ror #8
+        mov     tmp0, tmp0, ror #8
+        mov     tmp1, tmp1, ror #8
+        sel     d0, tmp0, s0
+        sel     d1, tmp1, s1
+.endm
+
+.macro src_8888_8888_8888_process_head  cond, numbytes, firstreg, unaligned_src, unaligned_mask, preload
+ .if numbytes == 16
+        ldm     SRC!, {STRIDE_S, STRIDE_M, WK0, WK1}
+        ldrb    WK2, [MASK], #4
+        ldrb    WK3, [MASK], #4
+        src_8888_8888_8888_2pixels STRIDE_S, STRIDE_M, WK2, WK3, WK2, WK3, SCRATCH, ORIG_W, STRIDE_D
+        ldrb    STRIDE_S, [MASK], #4
+        ldrb    STRIDE_M, [MASK], #4
+ .elseif numbytes == 8
+        ldm     SRC!, {STRIDE_S, STRIDE_M}
+        ldrb    WK2, [MASK], #4
+        ldrb    WK3, [MASK], #4
+ .else // numbytes == 4
+        ldr     STRIDE_S, [SRC], #4
+        ldrb    WK2, [MASK], #4
+ .endif
+.endm
+
+.macro src_8888_8888_8888_process_tail  cond, numbytes, firstreg
+ .if numbytes == 16
+        src_8888_8888_8888_2pixels WK0, WK1, STRIDE_S, STRIDE_M, SCRATCH, ORIG_W, SCRATCH, ORIG_W, STRIDE_D
+        stm     DST!, {WK2, WK3, SCRATCH, ORIG_W}
+ .elseif numbytes == 8
+        src_8888_8888_8888_2pixels STRIDE_S, STRIDE_M, WK2, WK3, SCRATCH, ORIG_W, SCRATCH, ORIG_W, STRIDE_D
+        stm     DST!, {SCRATCH, ORIG_W}
+ .else // numbytes == 4
+        src_8888_8888_8888_1pixel STRIDE_S, WK2, SCRATCH, SCRATCH, STRIDE_D
+        str     SCRATCH, [DST], #4
+ .endif
+20:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_src_mask_asm_armv6, 32, 32, 32, \
+    FLAG_DST_WRITEONLY | FLAG_BRANCH_OVER | FLAG_PROCESS_DOES_STORE | FLAG_SPILL_LINE_VARS, \
+    2, /* prefetch distance */ \
+    src_8888_8888_8888_init, \
+    src_8888_8888_8888_newline, \
+    nop_macro, /* cleanup */ \
+    src_8888_8888_8888_process_head, \
+    src_8888_8888_8888_process_tail
+
+/******************************************************************************/
+
 .macro src_0565_8888_init
         /* Hold loop invariants in MASK and STRIDE_M */
         ldr     MASK, =0x07E007E0
