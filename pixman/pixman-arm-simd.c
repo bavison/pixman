@@ -81,6 +81,26 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 0565_0565, SRC,
 PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_DST (armv6, 8888_8888, SRC,
                                         uint32_t, uint32_t)
 
+void
+pixman_composite_scanline_src_mask_asm_armv6 (int32_t         w,
+                                              uint32_t       *dst,
+                                              const uint32_t *src,
+                                              const uint32_t *mask);
+
+static void
+armv6_combine_src_u (pixman_implementation_t *imp,
+                     pixman_op_t              op,
+                     uint32_t *               dest,
+                     const uint32_t *         src,
+                     const uint32_t *         mask,
+                     int                      width)
+{
+    if (mask)
+        pixman_composite_scanline_src_mask_asm_armv6 (width, dest, src, mask);
+    else
+        memcpy (dest, src, width * sizeof (uint32_t));
+}
+
 PIXMAN_ARM_BIND_COMBINE_U (armv6, over)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, over_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, in)
@@ -313,6 +333,7 @@ _pixman_implementation_create_arm_simd (pixman_implementation_t *fallback)
 {
     pixman_implementation_t *imp = _pixman_implementation_create (fallback, arm_simd_fast_paths);
 
+    imp->combine_32[PIXMAN_OP_SRC] = armv6_combine_src_u;
     imp->combine_32[PIXMAN_OP_OVER] = armv6_combine_over_u;
     imp->combine_32[PIXMAN_OP_OVER_REVERSE] = armv6_combine_over_reverse_u;
     imp->combine_32[PIXMAN_OP_IN] = armv6_combine_in_u;
