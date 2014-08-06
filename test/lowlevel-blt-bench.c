@@ -51,6 +51,12 @@
 
 #define EXCLUDE_OVERHEAD 1
 
+struct name_to_number
+{
+    const char *name;
+    uint32_t    number;
+};
+
 uint32_t *dst;
 uint32_t *src;
 uint32_t *mask;
@@ -367,14 +373,14 @@ bench_RT (pixman_op_t              op,
 }
 
 void
-bench_composite (char * testname,
-                 int    src_fmt,
-                 int    src_flags,
-                 int    op,
-                 int    mask_fmt,
-                 int    mask_flags,
-                 int    dst_fmt,
-                 double npix)
+bench_composite (const char * testname,
+                 int          src_fmt,
+                 int          src_flags,
+                 int          op,
+                 int          mask_fmt,
+                 int          mask_flags,
+                 int          dst_fmt,
+                 double       npix)
 {
     pixman_image_t *                src_img;
     pixman_image_t *                dst_img;
@@ -719,12 +725,34 @@ tests_tbl[] =
     { "rpixbuf",               PIXMAN_x8b8g8r8,    0, PIXMAN_OP_SRC,     PIXMAN_a8b8g8r8, 0, PIXMAN_a8b8g8r8 },
 };
 
+static uint32_t
+lookup_name_to_number (const char **string, const struct name_to_number *array, size_t entries)
+{
+    size_t entry, i;
+    for (entry = 0; entry < entries; entry++)
+    {
+        for (i = 0; (*string)[i] == array[entry].name[i]; i++)
+            if ((*string)[i] == 0)
+            {
+                *string += i;
+                return array[entry].number;
+            }
+        if ((*string)[i] == '_' && array[entry].name[i] == 0)
+        {
+            *string += i;
+            return array[entry].number;
+        }
+    }
+    return 0;
+}
+
 int
 main (int argc, char *argv[])
 {
     double x;
     int i;
     const char *pattern = NULL;
+    int matches = 0;
     for (i = 1; i < argc; i++)
     {
 	if (argv[i][0] == '-')
@@ -805,6 +833,7 @@ main (int argc, char *argv[])
     {
 	if (strcmp (pattern, "all") == 0 || strcmp (tests_tbl[i].testname, pattern) == 0)
 	{
+	    ++matches;
 	    bench_composite (tests_tbl[i].testname,
 			     tests_tbl[i].src_fmt,
 			     tests_tbl[i].src_flags,
@@ -814,6 +843,90 @@ main (int argc, char *argv[])
 			     tests_tbl[i].dst_fmt,
 			     bandwidth/8);
 	}
+    }
+
+    if (matches == 0)
+    {
+        /* Try parsing the string instead */
+        static const struct name_to_number combine_type[] = {
+                { "src",          PIXMAN_OP_SRC },
+                { "over_reverse", PIXMAN_OP_OVER_REVERSE },
+                { "overrev",      PIXMAN_OP_OVER_REVERSE },
+                { "over",         PIXMAN_OP_OVER },
+                { "in_reverse",   PIXMAN_OP_IN_REVERSE },
+                { "inrev",        PIXMAN_OP_IN_REVERSE },
+                { "in",           PIXMAN_OP_IN },
+                { "out_reverse",  PIXMAN_OP_OUT_REVERSE },
+                { "outrev",       PIXMAN_OP_OUT_REVERSE },
+                { "out",          PIXMAN_OP_OUT },
+                { "atop_reverse", PIXMAN_OP_ATOP_REVERSE },
+                { "atoprev",      PIXMAN_OP_ATOP_REVERSE },
+                { "atop",         PIXMAN_OP_ATOP },
+                { "xor",          PIXMAN_OP_XOR },
+                { "add",          PIXMAN_OP_ADD }
+        };
+        static const struct name_to_number format[] = {
+                { "8888",         PIXMAN_a8r8g8b8 },
+                { "x888",         PIXMAN_x8r8g8b8 },
+                { "0565",         PIXMAN_r5g6b5 },
+                { "1555",         PIXMAN_a1r5g5b5 },
+                { "8",            PIXMAN_a8 }
+        };
+        const char *p = pattern;
+        int         src_fmt;
+        int         src_flags = 0;
+        int         mask_fmt;
+        int         mask_flags = 0;
+        int         dst_fmt;
+        int         op = lookup_name_to_number(&p, combine_type, sizeof combine_type / sizeof *combine_type);
+        if (op != 0 && *p++ == '_')
+        {
+            if (p[0] == 'n' && p[1] == '_')
+            {
+                src_fmt = PIXMAN_a8r8g8b8;
+                src_flags = SOLID_FLAG;
+                ++p;
+            }
+            else
+                src_fmt = lookup_name_to_number(&p, format, sizeof format / sizeof *format);
+            if (src_fmt != 0 && *p++ == '_')
+            {
+                if (p[0] == 'n' && p[1] == '_')
+                {
+                    mask_fmt = PIXMAN_a8r8g8b8;
+                    mask_flags = SOLID_FLAG;
+                    ++p;
+                }
+                else
+                    mask_fmt = lookup_name_to_number(&p, format, sizeof format / sizeof *format);
+                if (mask_fmt != 0)
+                {
+                    if (*p == 0)
+                    {
+                        dst_fmt = mask_fmt;
+                        mask_fmt = PIXMAN_null;
+                    }
+                    else
+                    {
+                        ++p;
+                        dst_fmt = lookup_name_to_number(&p, format, sizeof format / sizeof *format);
+                        if (strcmp (p, "_ca") == 0)
+                            mask_flags |= CA_FLAG;
+                        else if (*p != 0)
+                            dst_fmt = 0;
+                    }
+                    if (dst_fmt != 0)
+                        bench_composite (pattern,
+                                         src_fmt,
+                                         src_flags,
+                                         op,
+                                         mask_fmt,
+                                         mask_flags,
+                                         dst_fmt,
+                                         bandwidth/8);
+                }
+            }
+        }
     }
 
     free (src);
