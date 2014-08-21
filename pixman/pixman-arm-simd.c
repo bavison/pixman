@@ -37,6 +37,9 @@
 #define ALIGN(addr)                                                     \
     ((uint8_t *)((((uintptr_t)(addr)) + 15) & (~15)))
 
+#define ALIGN32(addr)                                                   \
+    ((uint8_t *)((((uintptr_t)(addr)) + 31) & (~31)))
+
 PIXMAN_ARM_BIND_FAST_PATH_SRC_DST (armv6, src_8888_8888,
 		                   uint32_t, 1, uint32_t, 1)
 PIXMAN_ARM_BIND_FAST_PATH_SRC_DST (armv6, src_x888_8888,
@@ -197,6 +200,224 @@ BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, x8r8g8b8, uint32_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, r5g6b5,   uint16_t)
 BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8,       uint8_t)
+
+typedef void (*bilinear_pass1_t) (uint32_t       width,
+                                  pixman_fixed_t x,
+                                  pixman_fixed_t ux,
+                                  int16_t       *dest,
+                                  const void    *source);
+
+#ifndef __STDC_VERSION__
+#define FLEXIBLE 1
+#else
+#if __STDC_VERSION__ >= 199901 // struct hack is illegal in C99, use flexible array member
+#define FLEXIBLE
+#else
+#define FLEXIBLE 1
+#endif
+#endif
+
+typedef struct
+{
+    bilinear_pass1_t pass1;
+    int              line_y[2];
+    int16_t         *line_buffer;
+    pixman_fixed_t   x;
+    pixman_fixed_t   y;
+    int              stride;
+    uint8_t          data[FLEXIBLE];
+} bilinear_info_t;
+
+static void
+armv6_get_scanline_bilinear_fini (pixman_iter_t *iter)
+{
+    free (iter->data);
+}
+
+void
+pixman_get_scanline_bilinear_scaled_cover_pass2_asm_armv6 (
+                                              uint32_t  width,
+                                              int16_t   dist_y,
+                                              uint32_t *dest,
+                                              int16_t  *source);
+
+void
+pixman_get_scanline_bilinear_scaled_cover_pass2a_asm_armv6 (
+                                              uint32_t  width,
+                                              uint32_t *dest,
+                                              int16_t  *source);
+
+#define BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(cputype, name, type)                        \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor0_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor1_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor2_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor3_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor4_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor5_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor6_asm_##cputype ();     \
+void pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor7_asm_##cputype ();     \
+                                                                                            \
+static void                                                                                 \
+cputype##_get_scanline_bilinear_scaled_cover_pass1_##name##_factor8 (                       \
+                                uint32_t       width,                                       \
+                                pixman_fixed_t x,                                           \
+                                pixman_fixed_t ux,                                          \
+                                int16_t       *dest,                                        \
+                                const void    *source)                                      \
+{                                                                                           \
+    /* The preload scheme used by the assembly version relies on the                        \
+     * reduction factor being less than 8x. Fall back to C. */                              \
+    while (width--)                                                                         \
+    {                                                                                       \
+        uint32_t lag, rag, lrb, rrb, dist_x, ag, rb;                                        \
+        cputype##_convert_adjacent_##name (source, pixman_fixed_to_int (x),                 \
+                &lag, &rag, &lrb, &rrb);                                                    \
+        dist_x = (x & 0xFFFF) >> (16 - BILINEAR_INTERPOLATION_BITS);                        \
+        ag     = (lag << BILINEAR_INTERPOLATION_BITS) + dist_x * (rag - lag);               \
+        rb     = (lrb << BILINEAR_INTERPOLATION_BITS) + dist_x * (rrb - lrb);               \
+        *(uint32_t *)(dest+0) = ag;                                                         \
+        *(uint32_t *)(dest+2) = rb;                                                         \
+        dest += 4;                                                                          \
+        if (((uintptr_t) dest & 31) == 0)                                                   \
+            dest += 4*4;                                                                    \
+        x += ux;                                                                            \
+    }                                                                                       \
+}                                                                                           \
+                                                                                            \
+static void                                                                                 \
+cputype##_get_scanline_bilinear_init_##name (pixman_iter_t *iter,                           \
+                                             const pixman_iter_info_t *iter_info)           \
+{                                                                                           \
+    int              width = iter->width;                                                   \
+    bilinear_info_t *info;                                                                  \
+    int              stride;                                                                \
+    type            *bits;                                                                  \
+    pixman_fixed_t   x, y, uxx, uxy, uyy;                                                   \
+                                                                                            \
+    PIXMAN_IMAGE_GET_SCALED (iter->image, iter->x, iter->y, type,                           \
+                             stride, bits, x, y, uxx, uxy, uyy);                            \
+    (void) bits;                                                                            \
+    (void) uxy;                                                                             \
+    (void) uyy;                                                                             \
+                                                                                            \
+    info = malloc (offsetof(bilinear_info_t, data) + 31 +                                   \
+            (width + 3) / 4 * sizeof (int16_t)*4*4 * 2);                                    \
+    if (!info)                                                                              \
+    {                                                                                       \
+        /* In this case, we don't guarantee any particular rendering. */                    \
+        _pixman_log_error (                                                                 \
+            FUNC, "Allocation failure, skipping rendering\n");                              \
+                                                                                            \
+        iter->get_scanline = _pixman_iter_get_scanline_noop;                                \
+        iter->fini = NULL;                                                                  \
+        iter->data = NULL;                                                                  \
+    }                                                                                       \
+    else                                                                                    \
+    {                                                                                       \
+        static const bilinear_pass1_t routines[9] = {                                       \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor0_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor1_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor2_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor3_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor4_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor5_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor6_asm_##cputype, \
+            pixman_get_scanline_bilinear_scaled_cover_pass1_##name##_factor7_asm_##cputype, \
+            cputype##_get_scanline_bilinear_scaled_cover_pass1_##name##_factor8             \
+        };                                                                                  \
+        uxx >>= 16;                                                                         \
+        if (uxx >= 8)                                                                       \
+            uxx = 8;                                                                        \
+        info->pass1 = routines[uxx];                                                        \
+                                                                                            \
+        /* It is safe to set the y coordinates to -1 initially                              \
+         * because COVER_CLIP_BILINEAR ensures that we will only                            \
+         * be asked to fetch lines in the [0, height) interval                              \
+         */                                                                                 \
+        info->line_y[0] = -1;                                                               \
+        info->line_y[1] = -1;                                                               \
+                                                                                            \
+        info->line_buffer = (int16_t *) ALIGN32 (info->data);                               \
+        info->x = x - pixman_fixed_1 / 2;                                                   \
+        info->y = y - pixman_fixed_1 / 2;                                                   \
+        info->stride = stride;                                                              \
+                                                                                            \
+        iter->fini = cputype##_get_scanline_bilinear_fini;                                  \
+        iter->data = info;                                                                  \
+    }                                                                                       \
+}                                                                                           \
+                                                                                            \
+static uint32_t *                                                                           \
+cputype##_get_scanline_bilinear_scaled_cover_##name (pixman_iter_t  *iter,                  \
+                                                     const uint32_t *mask)                  \
+{                                                                                           \
+    bilinear_info_t *info   = iter->data;                                                   \
+    int              y0     = pixman_fixed_to_int (info->y);                                \
+    int              y1     = y0 + 1;                                                       \
+    int              i      = y0 & 1;                                                       \
+    int              width  = iter->width;                                                  \
+    pixman_fixed_t   fx     = info->x;                                                      \
+    pixman_fixed_t   ux     = iter->image->common.transform->matrix[0][0];                  \
+    int16_t         *buffer = info->line_buffer;                                            \
+    type            *bits   = (type *)iter->image->bits.bits;                               \
+    int              stride = info->stride;                                                 \
+    uint32_t        *out    = iter->buffer;                                                 \
+    int32_t          dist_y;                                                                \
+                                                                                            \
+    dist_y = (info->y >> BILINEAR_INTERPOLATION_BITS) &                                     \
+             ((0x10000 >> BILINEAR_INTERPOLATION_BITS) -                                    \
+              (0x10000 >> (2 * BILINEAR_INTERPOLATION_BITS)));                              \
+    if (i)                                                                                  \
+    {                                                                                       \
+        /* Invert weight if upper scanline is in second buffer */                           \
+        dist_y = (0x10000 >> BILINEAR_INTERPOLATION_BITS) - dist_y;                         \
+    }                                                                                       \
+    info->y += iter->image->common.transform->matrix[1][1];                                 \
+                                                                                            \
+    if (info->line_y[i] != y0)                                                              \
+    {                                                                                       \
+        info->pass1 (width, fx, ux, buffer + 4*4*i, bits + stride * y0);                    \
+        info->line_y[i] = y0;                                                               \
+    }                                                                                       \
+                                                                                            \
+    if (dist_y & ((0x10000 >> BILINEAR_INTERPOLATION_BITS) -                                \
+                  (0x10000 >> (2 * BILINEAR_INTERPOLATION_BITS))))                          \
+    {                                                                                       \
+        if (info->line_y[!i] != y1)                                                         \
+        {                                                                                   \
+            info->pass1 (width, fx, ux, buffer + 4*4*!i, bits + stride * y1);               \
+            info->line_y[!i] = y1;                                                          \
+        }                                                                                   \
+                                                                                            \
+        pixman_get_scanline_bilinear_scaled_cover_pass2_asm_##cputype (                     \
+            width, dist_y, out, buffer);                                                    \
+    }                                                                                       \
+    else                                                                                    \
+    {                                                                                       \
+        pixman_get_scanline_bilinear_scaled_cover_pass2a_asm_##cputype (                    \
+            width, out, buffer + 4*4*i);                                                    \
+    }                                                                                       \
+                                                                                            \
+    return out;                                                                             \
+}
+
+static inline void armv6_convert_adjacent_a8r8g8b8 (const void *void_source,
+                                                    int         x,
+                                                    uint32_t   *lag,
+                                                    uint32_t   *rag,
+                                                    uint32_t   *lrb,
+                                                    uint32_t   *rrb)
+{
+    const uint32_t *source = void_source;
+    uint32_t left  = source[x];
+    uint32_t right = source[x+1];
+    *lag = (left & 0xff00ff00) >> 8;
+    *rag = (right & 0xff00ff00) >> 8;
+    *lrb = (left & 0x00ff00ff);
+    *rrb = (right & 0x00ff00ff);
+}
+
+BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(armv6, a8r8g8b8, uint32_t)
 
 #define NEAREST_SCALED_COVER_USES_SRC_BUFFER(op, src_format, dst_format) \
     (PIXMAN_OP_##op != PIXMAN_OP_SRC ||                                  \
@@ -546,6 +767,14 @@ static const pixman_iter_info_t arm_simd_iters[] =
       ITER_NARROW | ITER_SRC,
       NULL,
       armv6_get_scanline_nearest_scaled_cover_a8r8g8b8,
+      NULL
+    },
+
+    { PIXMAN_a8r8g8b8,
+      PIXMAN_ARM_BILINEAR_SCALED_COVER_FLAGS,
+      ITER_NARROW | ITER_SRC,
+      armv6_get_scanline_bilinear_init_a8r8g8b8,
+      armv6_get_scanline_bilinear_scaled_cover_a8r8g8b8,
       NULL
     },
 
