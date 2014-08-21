@@ -27,6 +27,7 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
 #include "pixman-private.h"
 #include "pixman-arm-common.h"
 #include "pixman-inlines.h"
@@ -152,6 +153,29 @@ PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8r8g8b8, 8888, uint32
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, x8r8g8b8, x888, uint32_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, r5g6b5,   0565, uint16_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (armv6, a8,       8,    uint8_t)
+
+static inline void
+armv6_store_part_interpolated (int16_t *dest, uint32_t ag, uint32_t rb)
+{
+    *(uint32_t *)(dest+0) = ag;
+    *(uint32_t *)(dest+2) = rb;
+}
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
+
+PIXMAN_ARM_DECLARE_BILINEAR_SCALED_SUPPORT(armv6)
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
+#define PIXMAN_ARM_BILINEAR_GRANULE 4
+#define PIXMAN_ARM_BILINEAR_PADDING_BITS (16 - 2 * BILINEAR_INTERPOLATION_BITS)
+
+PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(armv6, a8r8g8b8, uint32_t)
 
 #define NEAREST_SCALED_COVER_USES_SRC_BUFFER(op, src_format, dst_format) \
     (PIXMAN_OP_##op != PIXMAN_OP_SRC ||                                  \
@@ -497,6 +521,7 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
 static const pixman_iter_info_t arm_simd_iters[] =
 {
     PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (armv6, a8r8g8b8),
+    PIXMAN_ARM_BILINEAR_SCALED_FETCHER (armv6, a8r8g8b8),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, x8r8g8b8),
     PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (armv6, x8r8g8b8),
