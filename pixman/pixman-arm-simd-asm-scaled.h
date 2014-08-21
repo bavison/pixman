@@ -23,6 +23,8 @@
  * Author:  Ben Avison (bavison@riscosopen.org)
  */
 
+#include "pixman-private.h" // for BILINEAR_INTERPOLATION_BITS
+
 .set log2_32, 5
 .set log2_16, 4
 .set log2_8,  3
@@ -413,6 +415,343 @@ TMP     .req    lr
         .unreq  TMP
 .endfunc
 .endm
+
+/******************************************************************************/
+
+.macro bilinear_scaled_cover_process_horizontal  format, factor, in, nin, out, size, exit
+        mov     DIST, ACCUM, lsr #32 - BILINEAR_INTERPOLATION_BITS
+        sub     AG_OUT\out, AG_IN\nin, AG_IN\in
+        sub     RB_OUT\out, RB_IN\nin, RB_IN\in
+        mul     AG_OUT\out, AG_OUT\out, DIST
+        mul     RB_OUT\out, RB_OUT\out, DIST
+        ldr     UX, [sp]
+        add     AG_OUT\out, AG_OUT\out, AG_IN\in, lsl #BILINEAR_INTERPOLATION_BITS
+        add     RB_OUT\out, RB_OUT\out, RB_IN\in, lsl #BILINEAR_INTERPOLATION_BITS
+ .if \size == 1
+        stmia   DST!, {AG_OUT0, RB_OUT0}
+        subs    COUNT, COUNT, #1
+        bmi     .L\format\()_factor\factor\()_\exit
+ .elseif \out
+        stmia   DST!, {AG_OUT0, RB_OUT0, AG_OUT1, RB_OUT1}
+        tst     DST, #16
+        addeq   DST, DST, #32
+        subeqs  COUNT, COUNT, #4
+        bmi     .L\format\()_factor\factor\()_\exit
+ .endif
+        adds    ACCUM, ACCUM, UX
+.endm
+
+.macro bilinear_scaled_cover_innerloop  format, factor, convert, in, nin, out, nout, size, exit, dropthrough
+ .if \factor == 0
+
+  .L\format\()_factor\factor\()_\in\out\()_cs:
+  .if bpp == 32
+        ldr     AG_IN\nin, [SRC, #4]!
+  .elseif bpp == 16
+        ldrh    AG_IN\nin, [SRC, #2]!
+  .else // bpp == 8
+        ldrb    AG_IN\nin, [SRC, #1]!
+  .endif
+        tst     SRC, #31
+        bne     .L\format\()_factor\factor\()_\in\out\()_cs_skip
+        subs    PLDS, PLDS, #32
+        ble     .L\format\()_factor\factor\()_\in\out\()_cs_skip
+        pld     [SRC, #prefetch_distance*32]
+  .L\format\()_factor\factor\()_\in\out\()_cs_skip:
+        \convert  AG_IN\nin, RB_IN\nin
+  .L\format\()_factor\factor\()_\in\out\()_cc:
+        bilinear_scaled_cover_process_horizontal  \format, \factor, \in, \nin, \out, \size, \exit
+        bcc     .L\format\()_factor\factor\()_\in\nout\()_cc
+  .ifc "\dropthrough",""
+        b       .L\format\()_factor\factor\()_\nin\nout\()_cs
+  .endif
+
+ .elseif \factor == 1
+
+  .L\format\()_factor\factor\()_\in\out\()_cc:
+  .if bpp == 32
+        ldr     AG_IN\nin, [SRC, #4]!
+  .elseif bpp == 16
+        ldrh    AG_IN\nin, [SRC, #2]!
+  .else // bpp == 8
+        ldrb    AG_IN\nin, [SRC, #1]!
+  .endif
+        tst     SRC, #31
+  .if \in == 1
+        bne     .L\format\()_factor\factor\()_\in\out\()_cc_skip
+        subs    PLDS, PLDS, #32
+        ble     .L\format\()_factor\factor\()_\in\out\()_cc_skip
+        pld     [SRC, #prefetch_distance*32]
+  .L\format\()_factor\factor\()_\in\out\()_cc_skip:
+        \convert  AG_IN\nin, RB_IN\nin
+  .else
+        bne     .L\format\()_factor\factor\()_0\out\()_converge
+        subs    PLDS, PLDS, #32
+        ble     .L\format\()_factor\factor\()_0\out\()_converge
+        pld     [SRC, #prefetch_distance*32]
+        b       .L\format\()_factor\factor\()_0\out\()_converge
+   .L\format\()_factor\factor\()_0\out\()_cs:
+        orr     TMP, SRC, #31
+   .if bpp == 32
+        ldmib   SRC!, {AG_IN0, AG_IN1}
+   .elseif bpp == 16
+        ldrh    AG_IN0, [SRC, #2]!
+        ldrh    AG_IN1, [SRC, #2]!
+   .else // bpp == 8
+        ldrb    AG_IN0, [SRC, #1]!
+        ldrb    AG_IN1, [SRC, #1]!
+   .endif
+        cmp     SRC, TMP
+        subgts  PLDS, PLDS, #32
+        ble     .L\format\()_factor\factor\()_0\out\()_cs_skip
+        pld     [TMP, #1+prefetch_distance*32]
+   .L\format\()_factor\factor\()_0\out\()_cs_skip:
+        \convert  AG_IN0, RB_IN0
+   .L\format\()_factor\factor\()_0\out\()_converge:
+        \convert  AG_IN1, RB_IN1
+  .endif
+        bilinear_scaled_cover_process_horizontal  \format, \factor, \in, \nin, \out, \size, \exit
+        bcs     .L\format\()_factor\factor\()_0\nout\()_cs
+  .ifc "\dropthrough",""
+        b       .L\format\()_factor\factor\()_\nin\nout\()_cc
+  .endif
+
+ .else // \factor >= 2
+
+  .L\format\()_factor\factor\()_0\out\():
+        orr     TMP, SRC, #31
+  .if bpp == 32
+        ldrcs   AG_IN0, [SRC, #factor*4]!
+        ldrcc   AG_IN0, [SRC, #(factor-1)*4]!
+        ldr     AG_IN1, [SRC, #4]!
+  .elseif bpp == 16
+        ldrcsh  AG_IN0, [SRC, #factor*2]!
+        ldrcch  AG_IN0, [SRC, #(factor-1)*2]!
+        ldrh    AG_IN1, [SRC, #2]!
+  .else // bpp == 8
+        ldrcsb  AG_IN0, [SRC, #factor]!
+        ldrccb  AG_IN0, [SRC, #factor-1]!
+        ldrb    AG_IN1, [SRC, #1]!
+  .endif
+        cmp     SRC, TMP
+        subgts  PLDS, PLDS, #32
+        ble     .L\format\()_factor\factor\()_0\out\()_skip
+        pld     [TMP, #1+prefetch_distance*32]
+  .L\format\()_factor\factor\()_0\out\()_skip:
+        \convert  AG_IN0, RB_IN0
+        \convert  AG_IN1, RB_IN1
+        bilinear_scaled_cover_process_horizontal  \format, \factor, \in, \nin, \out, \size, \exit
+  .ifc "\dropthrough",""
+        b       .L\format\()_factor\factor\()_0\nout\()
+  .endif
+
+ .endif
+.endm
+
+.macro generate_bilinear_scaled_cover_function fname, \
+                                               bpp_, \
+                                               format, \
+                                               factor, \
+                                               prefetch_distance_, \
+                                               init, \
+                                               convert
+
+/* void fname(uint32_t       width,
+ *            pixman_fixed_t x,
+ *            pixman_fixed_t ux,
+ *            uint32_t      *dest,
+ *            const void    *source);
+ */
+pixman_asm_function fname
+
+/*
+ * Make some macro arguments globally visible and accessible
+ * from other macros
+ */
+ .set bpp, \bpp_
+ .set prefetch_distance, \prefetch_distance_
+
+/*
+ * Assign symbolic names to registers
+ */
+COUNT   .req    a1
+X       .req    a2
+ACCUM   .req    a2
+UX      .req    a3
+DIST    .req    a3
+TMP     .req    a3
+DST     .req    a4
+AG_IN0  .req    v1
+RB_IN0  .req    v2
+AG_IN1  .req    v3
+RB_IN1  .req    v4
+AG_OUT  .req    v5
+RB_OUT  .req    v6
+AG_OUT0 .req    v5
+RB_OUT0 .req    v6
+AG_OUT1 .req    v7
+RB_OUT1 .req    v8
+SRC     .req    ip
+PLDS    .req    lr
+
+        push    {v1-v8,lr}
+        subs    COUNT, COUNT, #1
+        bmi     99f
+
+        mla     v1, UX, COUNT, X        @ v1 = X for final pixel (memory pipeline still busy with push)
+        ldr     v2, [sp, #9*4]          @ get source from stack
+        add     SRC, v2, X, lsr #16 - (log2_\bpp_ - 3)
+        bic     v3, SRC, #31
+        add     v2, v2, v1, lsr #16 - (log2_\bpp_ - 3)
+        pld     [v3]
+        bic     SRC, SRC, #bpp/8-1
+ .if \factor >= 2
+        @ In these cases we point at the 2nd input sample when we enter the main loop
+        add     v1, SRC, #bpp/8
+        bic     v1, v1, #31
+        add     v1, v1, #prefetch_distance*32
+ .else
+        add     v1, v3, #prefetch_distance*32
+ .endif
+        add     v2, v2, #bpp/8           @ v2 -> second input sample for final pixel
+        subs    PLDS, v2, v1
+        movcc   v1, v2
+2:      add     v3, v3, #32
+        cmp     v3, v1
+        bhi     3f
+        pld     [v3]
+        b       2b
+3:      @ Add 1 to PLDS so that subs PLDS,PLDS,#32 sets GT whenever a preload is to be done
+        add     PLDS, PLDS, #1
+        mov     UX, UX, lsl #16
+        mov     ACCUM, X, lsl #16
+        push    {UX}
+        \init
+
+ .if \factor >= 2
+  .if bpp == 32
+        ldr     AG_IN0, [SRC]
+        ldr     AG_IN1, [SRC, #4]!
+  .elseif bpp == 16
+        ldrh    AG_IN0, [SRC]
+        ldrh    AG_IN1, [SRC, #2]!
+  .else // bpp == 8
+        ldrb    AG_IN0, [SRC]
+        ldrb    AG_IN1, [SRC, #1]!
+  .endif
+        \convert  AG_IN0, RB_IN0
+        \convert  AG_IN1, RB_IN1
+        subs    COUNT, COUNT, #4-1
+        bmi     .L\format\()_factor\factor\()_narrow
+        bilinear_scaled_cover_process_horizontal  \format, \factor, 0, 1, 0, 4, unused
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, 1, 0, 4, trailing, dropthrough
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, 0, 1, 4, trailing
+  .L\format\()_factor\factor\()_narrow:
+        add     COUNT, COUNT, #4-1
+        bilinear_scaled_cover_process_horizontal  \format, \factor, 0, 1, , 1, done
+        b       .L\format\()_factor\factor\()_0
+  .L\format\()_factor\factor\()_trailing:
+        adds    COUNT, COUNT, #4-1
+        bmi     98f
+        adds    ACCUM, ACCUM, UX
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, , , 1, done
+ .else
+  .if bpp == 32
+        ldr     AG_IN0, [SRC]
+  .elseif bpp == 16
+        ldrh    AG_IN0, [SRC]
+  .else // bpp == 8
+        ldrb    AG_IN0, [SRC]
+  .endif
+        \convert  AG_IN0, RB_IN0
+        subs    COUNT, COUNT, #4-1
+        addmi   COUNT, COUNT, #4-1
+  .if \factor == 0
+        bmi     .L\format\()_factor\factor\()_0_cs
+  .elseif \factor == 1
+        bmi     .L\format\()_factor\factor\()_0_cc
+  .endif
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, 0, 1, 4, 0_trailing, dropthrough
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 1, 0, 1, 0, 4, 1_trailing
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, 1, 0, 4, 0_trailing, dropthrough
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 1, 0, 0, 1, 4, 1_trailing
+  .L\format\()_factor\factor\()_0_trailing:
+        adds    COUNT, COUNT, #4-1
+        bmi     98f
+        adds    ACCUM, ACCUM, UX
+  .if \factor == 0
+        bcc     .L\format\()_factor\factor\()_0_cc
+  .elseif \factor == 1
+        bcs     .L\format\()_factor\factor\()_0_cs
+  .endif
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 1, 0, , , 1, done
+  .L\format\()_factor\factor\()_1_trailing:
+        adds    COUNT, COUNT, #4-1
+        bmi     98f
+        adds    ACCUM, ACCUM, UX
+  .if \factor == 0
+        bcc     .L\format\()_factor\factor\()_1_cc
+  .elseif \factor == 1
+        bcs     .L\format\()_factor\factor\()_0_cs
+  .endif
+        bilinear_scaled_cover_innerloop  \format, \factor, \convert, 0, 1, , , 1, done
+ .endif
+ .L\format\()_factor\factor\()_done:
+98:     pop     {UX,v1-v8,pc}
+99:     pop     {v1-v8,pc}
+
+.unreq  COUNT
+.unreq  X
+.unreq  ACCUM
+.unreq  UX
+.unreq  DIST
+.unreq  TMP
+.unreq  DST
+.unreq  AG_IN0
+.unreq  RB_IN0
+.unreq  AG_IN1
+.unreq  RB_IN1
+.unreq  AG_OUT0
+.unreq  RB_OUT0
+.unreq  AG_OUT1
+.unreq  RB_OUT1
+.unreq  SRC
+.unreq  PLDS
+.endfunc
+.endm
+
+.macro generate_bilinear_scaled_cover_functions bpp, \
+                                                format, \
+                                                pd0, pd1, pd2, pd3, pd4, pd5, pd6, pd7, \
+                                                init, \
+                                                convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor0_asm_armv6, \
+    \bpp, \format, 0, \pd0, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor1_asm_armv6, \
+    \bpp, \format, 1, \pd1, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor2_asm_armv6, \
+    \bpp, \format, 2, \pd2, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor3_asm_armv6, \
+    \bpp, \format, 3, \pd3, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor4_asm_armv6, \
+    \bpp, \format, 4, \pd4, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor5_asm_armv6, \
+    \bpp, \format, 5, \pd5, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor6_asm_armv6, \
+    \bpp, \format, 6, \pd6, \init, \convert
+generate_bilinear_scaled_cover_function \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor7_asm_armv6, \
+    \bpp, \format, 7, \pd7, \init, \convert
+.endm
+
+/******************************************************************************/
 
 .macro nop_macro x:vararg
 .endm
