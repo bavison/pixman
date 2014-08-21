@@ -203,3 +203,355 @@ generate_nearest_scaled_cover_function \
     2, 3 /* prefetch distances */, nop_macro, convert_8_8888
 
 /******************************************************************************/
+
+.macro convert_8888_08080808  in_ag, rb
+        uxtb16  \rb, \in_ag
+        uxtb16  \in_ag, \in_ag, ror #8
+.endm
+
+generate_bilinear_scaled_cover_functions  32, a8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, nop_macro, convert_8888_08080808
+
+/******************************************************************************/
+
+.macro pass2_1pixel_internal  t0, t1, b0, b1, tmp, mul, d
+        pkhtb   \tmp, \t0, \b0, asr #16
+        pkhbt   \t0, \b0, \t0, lsl #16
+        pkhtb   \b0, \t1, \b1, asr #16
+        pkhbt   \t1, \b1, \t1, lsl #16
+        smuad   \t0, \t0, \mul
+        smuad   \tmp, \tmp, \mul
+        smuad   \t1, \t1, \mul
+        smuad   \b0, \b0, \mul
+        mov     \tmp, \tmp, lsl #8
+        pkhtb   \t0, \tmp, \t0, asr #8
+        pkhtb   \t1, \b0, \t1, asr #16
+        sel     \d, \t1, \t0
+.endm
+
+.macro pass2_1pixel  check_src_thresh
+        ldrd    v3, v4, [SRC, #32]
+        ldrd    v1, v2, [SRC], #8
+ .if \check_src_thresh
+        tst     SRC, #31
+        addeq   SRC, SRC, #32
+ .endif
+        pass2_1pixel_internal  v1, v2, v3, v4, ip, DIST, v1
+        str     v1, [DST], #4
+.endm
+
+.macro pass2_preload  n, do_preload, pos
+ .ifnc "do_preload",""
+  /* Minimum distance is 32 because we read the bottom-row pixels from
+   * the cacheline after the one being pointed at */
+  .set dist, 32 + prefetch_distance*64
+  .if \n == 1 || \n == 2
+   /* Stretch one cacheline further ahead in these cases to ensure
+    * we stop preloading at boundary between groups of 4 output pixels */
+   .set dist, dist + 32
+  .endif
+  .if \pos == \n
+        /* Source pointer has just skipped "bottom" cacheline */
+        pld     [SRC, #dist]
+  .elseif ((\pos) & 1) == ((\n) & 1)
+        /* Time-equidistant between skips, but pointer is half-way through cacheline */
+        pld     [SRC, #16 + dist]
+  .endif
+ .endif
+.endm
+
+.macro pass2_4pixels  n, do_preload
+        ldrd    v3, v4, [SRC, #32]
+        ldrd    v1, v2, [SRC], #8 + 32*-(\n==1)
+        pass2_preload  \n, \do_preload, 1
+        ldrd    v7, v8, [SRC, #32]
+        ldrd    v5, v6, [SRC], #8 + 32*-(\n==2)
+        pass2_preload  \n, \do_preload, 2
+        pass2_1pixel_internal  v1, v2, v3, v4, ip, DIST, OUT0
+        pass2_1pixel_internal  v5, v6, v7, v8, ip, DIST, OUT1
+        ldrd    v5, v6, [SRC, #32]
+        ldrd    v3, v4, [SRC], #8 + 32*-(\n==3)
+        pass2_preload  \n, \do_preload, 3
+        ldrd    v7, v8, [SRC, #32]
+        ldr     lr, [SRC], #4
+        pass2_1pixel_internal  v3, v4, v5, v6, ip, DIST, OUT2
+        ldr     v6, [SRC], #4 + 32*-(\n==0)
+        pass2_preload  \n, \do_preload, 0
+        pass2_1pixel_internal  lr, v6, v7, v8, ip, DIST, OUT3
+        stmia   DST!, {OUT0, OUT1, OUT2, OUT3}
+.endm
+
+.macro pass2  n
+ .if \n == 1 || \n == 2
+        cmp     ip, #(prefetch_distance+1)*4
+        movcs   ip, #(prefetch_distance+1)*4
+ .else
+        cmp     ip, #prefetch_distance*4
+        movcs   ip, #prefetch_distance*4
+ .endif
+        subs    ip, ip, #4
+        bcc     2f
+1:      pld     [v1]
+        pld     [v1, #32]
+        add     v1, v1, #64
+        subs    ip, ip, #4
+        bcs     1b
+2:      sub     DIST, DIST, DIST, lsl #16
+        msr     cpsr_s, #0x50000
+        add     DIST, DIST, #1 << (32-BILINEAR_INTERPOLATION_BITS)
+        @ top half of DIST now holds complementary weight
+ .if \n != 0
+3:      pass2_1pixel  0
+        subs    COUNT, COUNT, #1
+        bmi     99f
+        tst     DST, #15
+        bne     3b
+ .endif
+        subs    COUNT, COUNT, #4-1
+        bmi     8f
+        @ pixels_remaining_minus_4 = COUNT
+        @ pixels_done = (4-n)&3
+        @ preloads_done = at most, (prefetch_distance + 1 + (n==2 | n==3)) * 2
+        @ total_preloads = (1 + (pixels - 1) / 4) * 2
+        @ so if n is 0 or 3, then
+        @ preloads_to_do_minus_1 = (COUNT + pixels_done - 1 - prefetch_distance*4) / 4 * 2
+        @ or if n is 1 or 2, then 2 fewer than that
+ .set adjust, ((4-\n)&3) - 1 - (prefetch_distance - (\n==1) - (\n==2)) * 4
+        adds    COUNT, COUNT, #adjust
+        bmi     6f
+5:      pass2_4pixels  \n, do_preload
+        subs    COUNT, COUNT, #4
+        bpl     5b
+6:
+ .if adjust > -4
+        subs    COUNT, COUNT, #adjust
+        bmi     8f  // have to handle the possibility there are no groups of 4 without preloads
+ .else
+        sub     COUNT, COUNT, #adjust
+ .endif
+7:      pass2_4pixels  \n
+        subs    COUNT, COUNT, #4
+        bpl     7b
+8:      adds    COUNT, COUNT, #4-1
+        bmi     99f
+9:      pass2_1pixel  (\n != 0)
+        subs    COUNT, COUNT, #1
+        bpl     9b
+99:     pop     {v1-v8,pc}
+.endm
+
+/* void
+ * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_armv6 (
+ *                                               uint32_t  width,
+ *                                               uint32_t *dest,
+ *                                               int16_t  *source,
+ *                                               int16_t   dist_y)
+ *
+ * This version is used when the output scanline falls between two
+ * different input scanlines
+ */
+pixman_asm_function pixman_get_scanline_bilinear_scaled_cover_pass2_asm_armv6
+COUNT   .req    a1
+DST     .req    a2
+SRC     .req    a3
+DIST    .req    a4
+OUT0    .req    v1
+OUT1    .req    v2
+OUT2    .req    v3
+OUT3    .req    v5 @ avoid register-lock of last STM register against following LDM
+.set prefetch_distance, 2
+        push    {v1-v8,lr}
+        subs    COUNT, COUNT, #1
+        bmi     99f
+        movs    ip, DST, lsl #29
+        add     v1, SRC, #64
+        mov     ip, COUNT
+        pld     [SRC]   @ already cacheline-aligned
+        pld     [SRC, #32]
+        @ total_preloads = (1 + (pixels - 1) / 4) * 2
+        @ initial_preloads = at most, (prefetch_distance + 1 + (n==2 | n==3)) * 2
+        bhi     13f
+        bcs     12f
+        bne     11f
+10:     pass2   0
+11:     pass2   1
+12:     pass2   2
+13:     pass2   3
+
+.unreq  COUNT
+.unreq  DST
+.unreq  DIST
+.unreq  SRC
+.unreq  OUT0
+.unreq  OUT1
+.unreq  OUT2
+.unreq  OUT3
+.endfunc
+
+/******************************************************************************/
+
+.macro pass2a_1pixel  check_src_thresh
+        ldmia   SRC!, {AG0, RB0}
+ .if \check_src_thresh
+        tst     SRC, #31
+  .if prefetch_distance == 0
+        bne     20f
+        teq     COUNT, #0
+        beq     20f
+        add     SRC, SRC, #32
+        pld     [SRC]
+20:
+  .else
+        addeq   SRC, SRC, #32
+  .endif
+ .endif
+        mov     AG0, AG0, lsl #8-BILINEAR_INTERPOLATION_BITS
+        mov     RB0, RB0, lsr #BILINEAR_INTERPOLATION_BITS
+        sel     OUT0, RB0, AG0
+        str     OUT0, [DST], #4
+.endm
+
+.macro pass2a_4pixels  n, do_preload
+ .if \n == 0
+        ldmia   SRC!, {AG0, RB0, AG1, RB1, AG2, RB2, AG3, RB3}
+ .elseif \n == 1
+        ldmia   SRC!, {AG0, RB0}
+ .elseif \n == 2
+        ldmia   SRC!, {AG0, RB0, AG1, RB1}
+ .else // \n == 3
+        ldmia   SRC!, {AG0, RB0, AG1, RB1, AG2, RB2}
+ .endif
+        add     SRC, SRC, #32
+ .ifnc "\do_preload",""
+        pld     [SRC, #prefetch_distance*64]
+ .endif
+ .if \n == 1
+        ldmia   SRC!, {AG1, RB1, AG2, RB2, AG3, RB3}
+ .elseif \n == 2
+        ldmia   SRC!, {AG2, RB2, AG3, RB3}
+ .elseif \n == 3
+        ldmia   SRC!, {AG3, RB3}
+ .endif
+        mov     AG0, AG0, lsl #8-BILINEAR_INTERPOLATION_BITS
+        mov     RB0, RB0, lsr #BILINEAR_INTERPOLATION_BITS
+        mov     AG1, AG1, lsl #8-BILINEAR_INTERPOLATION_BITS
+        mov     RB1, RB1, lsr #BILINEAR_INTERPOLATION_BITS
+        mov     AG2, AG2, lsl #8-BILINEAR_INTERPOLATION_BITS
+        mov     RB2, RB2, lsr #BILINEAR_INTERPOLATION_BITS
+        mov     AG3, AG3, lsl #8-BILINEAR_INTERPOLATION_BITS
+        mov     RB3, RB3, lsr #BILINEAR_INTERPOLATION_BITS
+        sel     OUT0, RB0, AG0
+        sel     OUT1, RB1, AG1
+        sel     OUT2, RB2, AG2
+        sel     OUT3, RB3, AG3
+        stmia   DST!, {OUT0, OUT1, OUT2, OUT3}
+.endm
+
+.macro pass2a  n
+ .if \n != 0
+3:      pass2a_1pixel  0
+        subs    COUNT, COUNT, #1
+        bmi     99f
+        tst     DST, #15
+        bne     3b
+ .endif
+        subs    COUNT, COUNT, #4-1
+        bmi     8f
+        @ pixels_remaining_minus_4 = COUNT
+        @ pixels_done = (4-n)&3
+        @ preloads_done = at most, prefetch_distance + 1
+        @ total_preloads = 1 + (pixels - 1) / 4
+        @ so preloads_to_do_minus_1 = (COUNT + pixels_done - 1 - prefetch_distance*4) / 4
+ .set adjust, ((4-\n)&3) - 1 - prefetch_distance*4
+        adds    COUNT, COUNT, #adjust
+        bmi     6f
+5:      pass2a_4pixels  \n, do_preload
+        subs    COUNT, COUNT, #4
+        bpl     5b
+6:
+ .if adjust > -4
+        subs    COUNT, COUNT, #adjust
+        bmi     8f  // have to handle the possibility there are no groups of 4 without preloads
+ .else
+        sub     COUNT, COUNT, #adjust
+ .endif
+7:      pass2a_4pixels  \n
+        subs    COUNT, COUNT, #4
+        bpl     7b
+8:      adds    COUNT, COUNT, #4-1
+        bmi     99f
+9:      pass2a_1pixel  (\n != 0)
+        subs    COUNT, COUNT, #1
+        bpl     9b
+99:     pop     {v1-v6,pc}
+.endm
+
+/* void
+ * pixman_get_scanline_bilinear_scaled_cover_pass2a_asm_armv6 (
+ *                                               uint32_t  width,
+ *                                               uint32_t *dest,
+ *                                               int16_t  *source)
+ *
+ * This version is used when the output scanline coincides
+ * exactly with an input scanline
+ */
+pixman_asm_function pixman_get_scanline_bilinear_scaled_cover_pass2a_asm_armv6
+COUNT   .req    a1
+DST     .req    a2
+SRC     .req    a3
+AG0     .req    a4
+RB0     .req    v1
+AG1     .req    v2
+RB1     .req    v3
+AG2     .req    v4
+RB2     .req    v5
+AG3     .req    v6
+RB3     .req    ip
+OUT0    .req    a4
+OUT1    .req    v2
+OUT2    .req    v4
+OUT3    .req    lr @ avoid register-lock of last STM register against following LDM
+.set prefetch_distance, 2
+        push    {v1-v6,lr}
+        subs    COUNT, COUNT, #1
+        bcc     99f
+        @ total_preloads = 1 + (pixels - 1) / 4
+        @ initial_preloads = at most, prefetch_distance + 1
+        mov     ip, #prefetch_distance*4
+        cmp     COUNT, #prefetch_distance*4
+        pld     [SRC]   @ already cacheline-aligned
+        movcc   ip, COUNT
+        add     a4, SRC, #64
+        subs    ip, ip, #4
+        bcc     2f
+1:      pld     [a4]
+        add     a4, a4, #64
+        subs    ip, ip, #4
+        bcs     1b
+2:      msr     cpsr_s, #0x50000
+        movs    ip, DST, lsl #29
+        bhi     13f
+        bcs     12f
+        bne     11f
+10:     pass2a  0
+11:     pass2a  1
+12:     pass2a  2
+13:     pass2a  3
+
+.unreq  COUNT
+.unreq  DST
+.unreq  SRC
+.unreq  AG0
+.unreq  RB0
+.unreq  AG1
+.unreq  RB1
+.unreq  AG2
+.unreq  RB2
+.unreq  AG3
+.unreq  RB3
+.unreq  OUT0
+.unreq  OUT1
+.unreq  OUT2
+.unreq  OUT3
+.endfunc
+
+/******************************************************************************/
