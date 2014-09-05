@@ -211,6 +211,14 @@ generate_nearest_scaled_cover_function \
 
 generate_bilinear_scaled_cover_functions  32, a8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, nop_macro, convert_8888_08080808
 
+.macro convert_x888_08080808  in_ag, rb
+        uxtb16  \rb, \in_ag
+        uxtb    \in_ag, \in_ag, ror #8
+        orr     \in_ag, \in_ag, #0xFF0000
+.endm
+
+generate_bilinear_scaled_cover_functions  32, x8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, nop_macro, convert_x888_08080808
+
 /******************************************************************************/
 
 .macro pass2_1pixel_internal  t0, t1, b0, b1, tmp, mul, d
