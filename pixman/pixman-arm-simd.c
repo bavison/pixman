@@ -467,6 +467,24 @@ static inline void armv6_convert_adjacent_r5g6b5 (const void *void_source,
 
 BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(armv6, r5g6b5, uint16_t)
 
+static inline void armv6_convert_adjacent_a8 (const void *void_source,
+                                              int         x,
+                                              uint32_t   *lag,
+                                              uint32_t   *rag,
+                                              uint32_t   *lrb,
+                                              uint32_t   *rrb)
+{
+    const uint8_t *source = void_source;
+    uint32_t left  = source[x];
+    uint32_t right = source[x+1];
+    *lag = left << 16;
+    *rag = right << 16;
+    *lrb = 0;
+    *rrb = 0;
+}
+
+BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(armv6, a8, uint8_t)
+
 #define NEAREST_SCALED_COVER_USES_SRC_BUFFER(op, src_format, dst_format) \
     (PIXMAN_OP_##op != PIXMAN_OP_SRC ||                                  \
      (PIXMAN_##dst_format != PIXMAN_a8r8g8b8 &&                          \
@@ -912,6 +930,14 @@ static const pixman_iter_info_t arm_simd_iters[] =
       ITER_NARROW | ITER_SRC,
       NULL,
       armv6_get_scanline_nearest_scaled_cover_a8,
+      NULL
+    },
+
+    { PIXMAN_a8,
+      PIXMAN_ARM_BILINEAR_SCALED_COVER_FLAGS,
+      ITER_NARROW | ITER_SRC,
+      armv6_get_scanline_bilinear_init_a8,
+      armv6_get_scanline_bilinear_scaled_cover_a8,
       NULL
     },
 
