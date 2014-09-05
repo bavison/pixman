@@ -229,6 +229,21 @@ generate_bilinear_scaled_cover_functions  32, x8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, 
 
 generate_bilinear_scaled_cover_functions  16, r5g6b5, 2, 2, 3, 3, 3, 3, 3, 3, nop_macro, convert_0565_08080808
 
+.macro init_8_08080808
+        @ Ideally we'd also skip all subsequent processing of the red/blue
+        @ components since they remain 0 throughout. Also, there may be
+        @ some scope for simplifying the alpha component processing.
+        @ However, this approach is still an improvement for now.
+        mov     RB_IN0, #0
+        mov     RB_IN1, #0
+.endm
+
+.macro convert_8_08080808  in_ag, rb
+        mov     \in_ag, \in_ag, lsl #16
+.endm
+
+generate_bilinear_scaled_cover_functions  8, a8, 2, 2, 3, 3, 3, 3, 3, 3, init_8_08080808, convert_8_08080808
+
 /******************************************************************************/
 
 .macro pass2_1pixel_internal  t0, t1, b0, b1, tmp, mul, d
