@@ -678,6 +678,25 @@ cputype##_convert_adjacent_r5g6b5 (const void *void_source,      \
     b |= b >> 5;                                                 \
     *rag = 0xff0000 | g;                                         \
     *rrb = (r << 16) | b;                                        \
+}                                                                \
+                                                                 \
+static inline void                                               \
+cputype##_convert_adjacent_a8 (const void *void_source,          \
+                               int         x,                    \
+                               uint32_t   *lag,                  \
+                               uint32_t   *rag,                  \
+                               uint32_t   *lrb,                  \
+                               uint32_t   *rrb)                  \
+{                                                                \
+    const uint8_t *source = void_source;                         \
+    uint32_t left  = source[pixman_fixed_to_int (x)];            \
+    uint32_t right;                                              \
+    if (pixman_fixed_fraction (x) != 0)                          \
+        right = source[pixman_fixed_to_int (x) + 1];             \
+    *lag = left << 16;                                           \
+    *rag = right << 16;                                          \
+    *lrb = 0;                                                    \
+    *rrb = 0;                                                    \
 }
 
 #define PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COMMON(cputype, name, type)            \
