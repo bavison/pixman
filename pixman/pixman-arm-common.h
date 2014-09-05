@@ -627,6 +627,25 @@ cputype##_convert_adjacent_a8r8g8b8 (const void *void_source,    \
     *rag = (right & 0xff00ff00) >> 8;                            \
     *lrb = (left & 0x00ff00ff);                                  \
     *rrb = (right & 0x00ff00ff);                                 \
+}                                                                \
+                                                                 \
+static inline void                                               \
+cputype##_convert_adjacent_x8r8g8b8 (const void *void_source,    \
+                                     int         x,              \
+                                     uint32_t   *lag,            \
+                                     uint32_t   *rag,            \
+                                     uint32_t   *lrb,            \
+                                     uint32_t   *rrb)            \
+{                                                                \
+    const uint32_t *source = void_source;                        \
+    uint32_t left  = source[pixman_fixed_to_int (x)];            \
+    uint32_t right;                                              \
+    if (pixman_fixed_fraction (x) != 0)                          \
+        right = source[pixman_fixed_to_int (x) + 1];             \
+    *lag = ((left & 0xff00) >> 8) | 0x00ff0000;                  \
+    *rag = ((right & 0xff00) >> 8) | 0x00ff0000;                 \
+    *lrb = (left & 0x00ff00ff);                                  \
+    *rrb = (right & 0x00ff00ff);                                 \
 }
 
 #define PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COMMON(cputype, name, type)            \
