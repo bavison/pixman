@@ -215,6 +215,20 @@ generate_bilinear_scaled_cover_functions  32, a8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, 
 
 generate_bilinear_scaled_cover_functions  32, x8r8g8b8, 3, 3, 3, 3, 3, 3, 3, 3, nop_macro, convert_x888_08080808
 
+.macro convert_0565_08080808  in_ag, rb
+        bic     \rb, \in_ag, #0x07E0               @ 0000000000000000rrrrr000000bbbbb
+        and     \in_ag, \in_ag, #0x07E0            @ 000000000000000000000gggggg00000
+        mov     \rb, \rb, lsl #3                   @ 0000000000000rrrrr000000bbbbb000
+        mov     \in_ag, \in_ag, lsr #3             @ 000000000000000000000000gggggg00
+        orr     \rb, \rb, \rb, lsr #5              @ 0000000000000rrrrrrrrrr0bbbbbbbb
+        orr     \in_ag, \in_ag, lsr #6             @ 000000000000000000000000gggggggg
+        pkhbt   \rb, \rb, \rb, lsl #5              @ 00000000rrrrrrrr-------0bbbbbbbb
+        orr     \in_ag, \in_ag, #0xFF0000          @ 000000001111111100000000gggggggg
+        bic     \rb, \rb, #0xFF00                  @ 00000000rrrrrrrr00000000bbbbbbbb
+.endm
+
+generate_bilinear_scaled_cover_functions  16, r5g6b5, 2, 2, 3, 3, 3, 3, 3, 3, nop_macro, convert_0565_08080808
+
 /******************************************************************************/
 
 .macro pass2_1pixel_internal  t0, t1, b0, b1, tmp, mul, d
