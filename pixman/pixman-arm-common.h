@@ -646,6 +646,38 @@ cputype##_convert_adjacent_x8r8g8b8 (const void *void_source,    \
     *rag = ((right & 0xff00) >> 8) | 0x00ff0000;                 \
     *lrb = (left & 0x00ff00ff);                                  \
     *rrb = (right & 0x00ff00ff);                                 \
+}                                                                \
+                                                                 \
+static inline void                                               \
+cputype##_convert_adjacent_r5g6b5 (const void *void_source,      \
+                                   int         x,                \
+                                   uint32_t   *lag,              \
+                                   uint32_t   *rag,              \
+                                   uint32_t   *lrb,              \
+                                   uint32_t   *rrb)              \
+{                                                                \
+    const uint16_t *source = void_source;                        \
+    uint32_t r, g, b;                                            \
+    uint32_t left  = source[pixman_fixed_to_int (x)];            \
+    uint32_t right;                                              \
+    if (pixman_fixed_fraction (x) != 0)                          \
+        right = source[pixman_fixed_to_int (x) + 1];             \
+    r = (left >> 8) & 0xf8;                                      \
+    g = (left >> 3) & 0xfc;                                      \
+    b = (left << 3) & 0xf8;                                      \
+    r |= r >> 5;                                                 \
+    g |= g >> 6;                                                 \
+    b |= b >> 5;                                                 \
+    *lag = 0xff0000 | g;                                         \
+    *lrb = (r << 16) | b;                                        \
+    r = (right >> 8) & 0xf8;                                     \
+    g = (right >> 3) & 0xfc;                                     \
+    b = (right << 3) & 0xf8;                                     \
+    r |= r >> 5;                                                 \
+    g |= g >> 6;                                                 \
+    b |= b >> 5;                                                 \
+    *rag = 0xff0000 | g;                                         \
+    *rrb = (r << 16) | b;                                        \
 }
 
 #define PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COMMON(cputype, name, type)            \
