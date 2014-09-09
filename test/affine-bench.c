@@ -385,10 +385,10 @@ main (int argc, char *argv[])
     }
 
     compute_transformed_extents (&t, &dest_box, &transformed);
-    xmin = pixman_fixed_to_int (transformed.x1 - 8 * pixman_fixed_e - pixman_fixed_1 / 2);
-    ymin = pixman_fixed_to_int (transformed.y1 - 8 * pixman_fixed_e - pixman_fixed_1 / 2);
-    xmax = pixman_fixed_to_int (transformed.x2 + 8 * pixman_fixed_e + pixman_fixed_1 / 2);
-    ymax = pixman_fixed_to_int (transformed.y2 + 8 * pixman_fixed_e + pixman_fixed_1 / 2);
+    xmin = pixman_fixed_to_int (transformed.x1 - pixman_fixed_1 / 2);
+    ymin = pixman_fixed_to_int (transformed.y1 - pixman_fixed_1 / 2);
+    xmax = pixman_fixed_to_int (transformed.x2 + pixman_fixed_1 / 2 - pixman_fixed_e);
+    ymax = pixman_fixed_to_int (transformed.y2 + pixman_fixed_1 / 2 - pixman_fixed_e);
     src_x = -xmin;
     src_y = -ymin;
 
