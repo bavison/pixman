@@ -399,10 +399,10 @@ main (int argc, char *argv[])
     /* The source area is expanded by a tiny bit (8/65536th pixel)
      * to match the calculation of the COVER_CLIP flags in analyze_extent()
      */
-    xmin = pixman_fixed_to_int (transformed.x1 - 8 * pixman_fixed_e - pixman_fixed_1 / 2);
-    ymin = pixman_fixed_to_int (transformed.y1 - 8 * pixman_fixed_e - pixman_fixed_1 / 2);
-    xmax = pixman_fixed_to_int (transformed.x2 + 8 * pixman_fixed_e + pixman_fixed_1 / 2);
-    ymax = pixman_fixed_to_int (transformed.y2 + 8 * pixman_fixed_e + pixman_fixed_1 / 2);
+    xmin = pixman_fixed_to_int (transformed.x1 - pixman_fixed_1 / 2);
+    ymin = pixman_fixed_to_int (transformed.y1 - pixman_fixed_1 / 2);
+    xmax = pixman_fixed_to_int (transformed.x2 + pixman_fixed_1 / 2 - pixman_fixed_e);
+    ymax = pixman_fixed_to_int (transformed.y2 + pixman_fixed_1 / 2 - pixman_fixed_e);
     binfo.src_x = -xmin;
     binfo.src_y = -ymin;
 
