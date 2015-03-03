@@ -29,6 +29,15 @@
 #include <png.h>
 #endif
 
+typedef struct
+{
+    const char *name;
+    uint32_t    number;
+} name_to_number_t;
+
+#define CAT(x,y) x##y
+#define NAME_TO_NUMBER_INITIALIZER(prefix,name) { #name, CAT(prefix,name) }
+
 /* Random number generator state
  */
 
@@ -949,106 +958,119 @@ initialize_palette (pixman_indexed_t *palette, uint32_t depth, int is_rgb)
     }
 }
 
-static const pixman_op_t op_list[] =
+static const name_to_number_t op_list[] =
 {
-    PIXMAN_OP_CLEAR,
-    PIXMAN_OP_SRC,
-    PIXMAN_OP_DST,
-    PIXMAN_OP_OVER,
-    PIXMAN_OP_OVER_REVERSE,
-    PIXMAN_OP_IN,
-    PIXMAN_OP_IN_REVERSE,
-    PIXMAN_OP_OUT,
-    PIXMAN_OP_OUT_REVERSE,
-    PIXMAN_OP_ATOP,
-    PIXMAN_OP_ATOP_REVERSE,
-    PIXMAN_OP_XOR,
-    PIXMAN_OP_ADD,
-    PIXMAN_OP_SATURATE,
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CLEAR),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_SRC),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DST),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_OVER),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_OVER_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_IN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_IN_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_OUT),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_OUT_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_ATOP),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_ATOP_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_XOR),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_ADD),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_SATURATE),
 
-    PIXMAN_OP_DISJOINT_CLEAR,
-    PIXMAN_OP_DISJOINT_SRC,
-    PIXMAN_OP_DISJOINT_DST,
-    PIXMAN_OP_DISJOINT_OVER,
-    PIXMAN_OP_DISJOINT_OVER_REVERSE,
-    PIXMAN_OP_DISJOINT_IN,
-    PIXMAN_OP_DISJOINT_IN_REVERSE,
-    PIXMAN_OP_DISJOINT_OUT,
-    PIXMAN_OP_DISJOINT_OUT_REVERSE,
-    PIXMAN_OP_DISJOINT_ATOP,
-    PIXMAN_OP_DISJOINT_ATOP_REVERSE,
-    PIXMAN_OP_DISJOINT_XOR,
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_CLEAR),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_SRC),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_DST),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_OVER),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_OVER_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_IN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_IN_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_OUT),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_OUT_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_ATOP),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_ATOP_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DISJOINT_XOR),
 
-    PIXMAN_OP_CONJOINT_CLEAR,
-    PIXMAN_OP_CONJOINT_SRC,
-    PIXMAN_OP_CONJOINT_DST,
-    PIXMAN_OP_CONJOINT_OVER,
-    PIXMAN_OP_CONJOINT_OVER_REVERSE,
-    PIXMAN_OP_CONJOINT_IN,
-    PIXMAN_OP_CONJOINT_IN_REVERSE,
-    PIXMAN_OP_CONJOINT_OUT,
-    PIXMAN_OP_CONJOINT_OUT_REVERSE,
-    PIXMAN_OP_CONJOINT_ATOP,
-    PIXMAN_OP_CONJOINT_ATOP_REVERSE,
-    PIXMAN_OP_CONJOINT_XOR,
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_CLEAR),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_SRC),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_DST),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_OVER),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_OVER_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_IN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_IN_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_OUT),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_OUT_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_ATOP),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_ATOP_REVERSE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_CONJOINT_XOR),
 
-    PIXMAN_OP_MULTIPLY,
-    PIXMAN_OP_SCREEN,
-    PIXMAN_OP_OVERLAY,
-    PIXMAN_OP_DARKEN,
-    PIXMAN_OP_LIGHTEN,
-    PIXMAN_OP_COLOR_DODGE,
-    PIXMAN_OP_COLOR_BURN,
-    PIXMAN_OP_HARD_LIGHT,
-    PIXMAN_OP_SOFT_LIGHT,
-    PIXMAN_OP_DIFFERENCE,
-    PIXMAN_OP_EXCLUSION,
-    PIXMAN_OP_HSL_HUE,
-    PIXMAN_OP_HSL_SATURATION,
-    PIXMAN_OP_HSL_COLOR,
-    PIXMAN_OP_HSL_LUMINOSITY
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_MULTIPLY),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_SCREEN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_OVERLAY),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DARKEN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_LIGHTEN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_COLOR_DODGE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_COLOR_BURN),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_HARD_LIGHT),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_SOFT_LIGHT),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_DIFFERENCE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_EXCLUSION),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_HSL_HUE),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_HSL_SATURATION),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_HSL_COLOR),
+    NAME_TO_NUMBER_INITIALIZER(,PIXMAN_OP_HSL_LUMINOSITY),
 };
 
-static const pixman_format_code_t format_list[] =
+static const name_to_number_t format_list[] =
 {
-    PIXMAN_a8r8g8b8,
-    PIXMAN_x8r8g8b8,
-    PIXMAN_a8b8g8r8,
-    PIXMAN_x8b8g8r8,
-    PIXMAN_b8g8r8a8,
-    PIXMAN_b8g8r8x8,
-    PIXMAN_r8g8b8a8,
-    PIXMAN_r8g8b8x8,
-    PIXMAN_x14r6g6b6,
-    PIXMAN_x2r10g10b10,
-    PIXMAN_a2r10g10b10,
-    PIXMAN_x2b10g10r10,
-    PIXMAN_a2b10g10r10,
-    PIXMAN_a8r8g8b8_sRGB,
-    PIXMAN_r8g8b8,
-    PIXMAN_b8g8r8,
-    PIXMAN_r5g6b5,
-    PIXMAN_b5g6r5,
-    PIXMAN_a1r5g5b5,
-    PIXMAN_x1r5g5b5,
-    PIXMAN_a1b5g5r5,
-    PIXMAN_x1b5g5r5,
-    PIXMAN_a4r4g4b4,
-    PIXMAN_x4r4g4b4,
-    PIXMAN_a4b4g4r4,
-    PIXMAN_x4b4g4r4,
-    PIXMAN_a8,
-    PIXMAN_r3g3b2,
-    PIXMAN_b2g3r3,
-    PIXMAN_a2r2g2b2,
-    PIXMAN_a2b2g2r2,
-    PIXMAN_x4a4,
-    PIXMAN_a4,
-    PIXMAN_r1g2b1,
-    PIXMAN_b1g2r1,
-    PIXMAN_a1r1g1b1,
-    PIXMAN_a1b1g1r1,
-    PIXMAN_a1,
+/* 32bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a8r8g8b8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x8r8g8b8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a8b8g8r8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x8b8g8r8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b8g8r8a8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b8g8r8x8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r8g8b8a8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r8g8b8x8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x14r6g6b6),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x2r10g10b10),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a2r10g10b10),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x2b10g10r10),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a2b10g10r10),
+
+/* sRGB formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a8r8g8b8_sRGB),
+
+/* 24bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r8g8b8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b8g8r8),
+
+/* 16bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r5g6b5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b5g6r5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a1r5g5b5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x1r5g5b5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a1b5g5r5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x1b5g5r5),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a4r4g4b4),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x4r4g4b4),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a4b4g4r4),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x4b4g4r4),
+
+/* 8bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a8),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r3g3b2),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b2g3r3),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a2r2g2b2),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a2b2g2r2),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,x4a4),
+
+/* 4bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a4),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,r1g2b1),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,b1g2r1),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a1r1g1b1),
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a1b1g1r1),
+
+/* 1bpp formats */
+    NAME_TO_NUMBER_INITIALIZER(PIXMAN_,a1),
 };
 
 pixman_format_code_t
@@ -1058,8 +1080,8 @@ format_from_string (const char *s)
 
     for (i = 0; i < ARRAY_LENGTH (format_list); ++i)
     {
-        if (strcasecmp (format_name (format_list[i]), s) == 0)
-            return format_list[i];
+        if (strcasecmp (format_list[i].name, s) == 0)
+            return format_list[i].number;
     }
 
     return PIXMAN_null;
@@ -1091,7 +1113,7 @@ list_formats (void)
 
     n_chars = 0;
     for (i = 0; i < ARRAY_LENGTH (format_list); ++i)
-        emit (format_name (format_list[i]), &n_chars);
+        emit (format_list[i].name, &n_chars);
 
     printf ("\n\n");
 }
@@ -1107,7 +1129,7 @@ list_operators (void)
     n_chars = 0;
     for (i = 0; i < ARRAY_LENGTH (op_list); ++i)
     {
-        pixman_op_t op = op_list[i];
+        pixman_op_t op = op_list[i].number;
         int j;
 
         snprintf (short_name, sizeof (short_name) - 1, "%s",
@@ -1132,10 +1154,8 @@ operator_from_string (const char *s)
 
     for (i = 0; i < ARRAY_LENGTH (op_list); ++i)
     {
-        pixman_op_t op = op_list[i];
-
-        if (strcasecmp (operator_name (op), full_name) == 0)
-            return op;
+        if (strcasecmp (op_list[i].name, full_name) == 0)
+            return op_list[i].number;
     }
 
     return PIXMAN_OP_NONE;
@@ -1144,68 +1164,16 @@ operator_from_string (const char *s)
 const char *
 operator_name (pixman_op_t op)
 {
-    switch (op)
+    int i;
+
+    for (i = 0; i < ARRAY_LENGTH (op_list); ++i)
     {
-    case PIXMAN_OP_CLEAR: return "PIXMAN_OP_CLEAR";
-    case PIXMAN_OP_SRC: return "PIXMAN_OP_SRC";
-    case PIXMAN_OP_DST: return "PIXMAN_OP_DST";
-    case PIXMAN_OP_OVER: return "PIXMAN_OP_OVER";
-    case PIXMAN_OP_OVER_REVERSE: return "PIXMAN_OP_OVER_REVERSE";
-    case PIXMAN_OP_IN: return "PIXMAN_OP_IN";
-    case PIXMAN_OP_IN_REVERSE: return "PIXMAN_OP_IN_REVERSE";
-    case PIXMAN_OP_OUT: return "PIXMAN_OP_OUT";
-    case PIXMAN_OP_OUT_REVERSE: return "PIXMAN_OP_OUT_REVERSE";
-    case PIXMAN_OP_ATOP: return "PIXMAN_OP_ATOP";
-    case PIXMAN_OP_ATOP_REVERSE: return "PIXMAN_OP_ATOP_REVERSE";
-    case PIXMAN_OP_XOR: return "PIXMAN_OP_XOR";
-    case PIXMAN_OP_ADD: return "PIXMAN_OP_ADD";
-    case PIXMAN_OP_SATURATE: return "PIXMAN_OP_SATURATE";
+        if (op_list[i].number == op)
+            return op_list[i].name;
+    }
 
-    case PIXMAN_OP_DISJOINT_CLEAR: return "PIXMAN_OP_DISJOINT_CLEAR";
-    case PIXMAN_OP_DISJOINT_SRC: return "PIXMAN_OP_DISJOINT_SRC";
-    case PIXMAN_OP_DISJOINT_DST: return "PIXMAN_OP_DISJOINT_DST";
-    case PIXMAN_OP_DISJOINT_OVER: return "PIXMAN_OP_DISJOINT_OVER";
-    case PIXMAN_OP_DISJOINT_OVER_REVERSE: return "PIXMAN_OP_DISJOINT_OVER_REVERSE";
-    case PIXMAN_OP_DISJOINT_IN: return "PIXMAN_OP_DISJOINT_IN";
-    case PIXMAN_OP_DISJOINT_IN_REVERSE: return "PIXMAN_OP_DISJOINT_IN_REVERSE";
-    case PIXMAN_OP_DISJOINT_OUT: return "PIXMAN_OP_DISJOINT_OUT";
-    case PIXMAN_OP_DISJOINT_OUT_REVERSE: return "PIXMAN_OP_DISJOINT_OUT_REVERSE";
-    case PIXMAN_OP_DISJOINT_ATOP: return "PIXMAN_OP_DISJOINT_ATOP";
-    case PIXMAN_OP_DISJOINT_ATOP_REVERSE: return "PIXMAN_OP_DISJOINT_ATOP_REVERSE";
-    case PIXMAN_OP_DISJOINT_XOR: return "PIXMAN_OP_DISJOINT_XOR";
-
-    case PIXMAN_OP_CONJOINT_CLEAR: return "PIXMAN_OP_CONJOINT_CLEAR";
-    case PIXMAN_OP_CONJOINT_SRC: return "PIXMAN_OP_CONJOINT_SRC";
-    case PIXMAN_OP_CONJOINT_DST: return "PIXMAN_OP_CONJOINT_DST";
-    case PIXMAN_OP_CONJOINT_OVER: return "PIXMAN_OP_CONJOINT_OVER";
-    case PIXMAN_OP_CONJOINT_OVER_REVERSE: return "PIXMAN_OP_CONJOINT_OVER_REVERSE";
-    case PIXMAN_OP_CONJOINT_IN: return "PIXMAN_OP_CONJOINT_IN";
-    case PIXMAN_OP_CONJOINT_IN_REVERSE: return "PIXMAN_OP_CONJOINT_IN_REVERSE";
-    case PIXMAN_OP_CONJOINT_OUT: return "PIXMAN_OP_CONJOINT_OUT";
-    case PIXMAN_OP_CONJOINT_OUT_REVERSE: return "PIXMAN_OP_CONJOINT_OUT_REVERSE";
-    case PIXMAN_OP_CONJOINT_ATOP: return "PIXMAN_OP_CONJOINT_ATOP";
-    case PIXMAN_OP_CONJOINT_ATOP_REVERSE: return "PIXMAN_OP_CONJOINT_ATOP_REVERSE";
-    case PIXMAN_OP_CONJOINT_XOR: return "PIXMAN_OP_CONJOINT_XOR";
-
-    case PIXMAN_OP_MULTIPLY: return "PIXMAN_OP_MULTIPLY";
-    case PIXMAN_OP_SCREEN: return "PIXMAN_OP_SCREEN";
-    case PIXMAN_OP_OVERLAY: return "PIXMAN_OP_OVERLAY";
-    case PIXMAN_OP_DARKEN: return "PIXMAN_OP_DARKEN";
-    case PIXMAN_OP_LIGHTEN: return "PIXMAN_OP_LIGHTEN";
-    case PIXMAN_OP_COLOR_DODGE: return "PIXMAN_OP_COLOR_DODGE";
-    case PIXMAN_OP_COLOR_BURN: return "PIXMAN_OP_COLOR_BURN";
-    case PIXMAN_OP_HARD_LIGHT: return "PIXMAN_OP_HARD_LIGHT";
-    case PIXMAN_OP_SOFT_LIGHT: return "PIXMAN_OP_SOFT_LIGHT";
-    case PIXMAN_OP_DIFFERENCE: return "PIXMAN_OP_DIFFERENCE";
-    case PIXMAN_OP_EXCLUSION: return "PIXMAN_OP_EXCLUSION";
-    case PIXMAN_OP_HSL_HUE: return "PIXMAN_OP_HSL_HUE";
-    case PIXMAN_OP_HSL_SATURATION: return "PIXMAN_OP_HSL_SATURATION";
-    case PIXMAN_OP_HSL_COLOR: return "PIXMAN_OP_HSL_COLOR";
-    case PIXMAN_OP_HSL_LUMINOSITY: return "PIXMAN_OP_HSL_LUMINOSITY";
-
-    case PIXMAN_OP_NONE:
+    if (op == PIXMAN_OP_NONE)
 	return "<invalid operator 'none'>";
-    };
 
     return "<unknown operator>";
 }
@@ -1213,50 +1181,19 @@ operator_name (pixman_op_t op)
 const char *
 format_name (pixman_format_code_t format)
 {
+    /* First check for one of the formats in format_list */
+    int i;
+
+    for (i = 0; i < ARRAY_LENGTH (format_list); ++i)
+    {
+        if (format == format_list[i].number)
+            return format_list[i].name;
+    }
+
+    /* Also permit some additional formats */
     switch (format)
     {
-/* 32bpp formats */
-    case PIXMAN_a8r8g8b8: return "a8r8g8b8";
-    case PIXMAN_x8r8g8b8: return "x8r8g8b8";
-    case PIXMAN_a8b8g8r8: return "a8b8g8r8";
-    case PIXMAN_x8b8g8r8: return "x8b8g8r8";
-    case PIXMAN_b8g8r8a8: return "b8g8r8a8";
-    case PIXMAN_b8g8r8x8: return "b8g8r8x8";
-    case PIXMAN_r8g8b8a8: return "r8g8b8a8";
-    case PIXMAN_r8g8b8x8: return "r8g8b8x8";
-    case PIXMAN_x14r6g6b6: return "x14r6g6b6";
-    case PIXMAN_x2r10g10b10: return "x2r10g10b10";
-    case PIXMAN_a2r10g10b10: return "a2r10g10b10";
-    case PIXMAN_x2b10g10r10: return "x2b10g10r10";
-    case PIXMAN_a2b10g10r10: return "a2b10g10r10";
-
-/* sRGB formats */
-    case PIXMAN_a8r8g8b8_sRGB: return "a8r8g8b8_sRGB";
-
-/* 24bpp formats */
-    case PIXMAN_r8g8b8: return "r8g8b8";
-    case PIXMAN_b8g8r8: return "b8g8r8";
-
-/* 16bpp formats */
-    case PIXMAN_r5g6b5: return "r5g6b5";
-    case PIXMAN_b5g6r5: return "b5g6r5";
-
-    case PIXMAN_a1r5g5b5: return "a1r5g5b5";
-    case PIXMAN_x1r5g5b5: return "x1r5g5b5";
-    case PIXMAN_a1b5g5r5: return "a1b5g5r5";
-    case PIXMAN_x1b5g5r5: return "x1b5g5r5";
-    case PIXMAN_a4r4g4b4: return "a4r4g4b4";
-    case PIXMAN_x4r4g4b4: return "x4r4g4b4";
-    case PIXMAN_a4b4g4r4: return "a4b4g4r4";
-    case PIXMAN_x4b4g4r4: return "x4b4g4r4";
-
 /* 8bpp formats */
-    case PIXMAN_a8: return "a8";
-    case PIXMAN_r3g3b2: return "r3g3b2";
-    case PIXMAN_b2g3r3: return "b2g3r3";
-    case PIXMAN_a2r2g2b2: return "a2r2g2b2";
-    case PIXMAN_a2b2g2r2: return "a2b2g2r2";
-
 #if 0
     case PIXMAN_x4c4: return "x4c4";
     case PIXMAN_g8: return "g8";
@@ -1264,26 +1201,18 @@ format_name (pixman_format_code_t format)
     case PIXMAN_c8: return "x4c4 / c8";
     case PIXMAN_x4g4: return "x4g4 / g8";
 
-    case PIXMAN_x4a4: return "x4a4";
-
 /* 4bpp formats */
-    case PIXMAN_a4: return "a4";
-    case PIXMAN_r1g2b1: return "r1g2b1";
-    case PIXMAN_b1g2r1: return "b1g2r1";
-    case PIXMAN_a1r1g1b1: return "a1r1g1b1";
-    case PIXMAN_a1b1g1r1: return "a1b1g1r1";
-
     case PIXMAN_c4: return "c4";
     case PIXMAN_g4: return "g4";
 
 /* 1bpp formats */
-    case PIXMAN_a1: return "a1";
-
     case PIXMAN_g1: return "g1";
 
 /* YUV formats */
     case PIXMAN_yuy2: return "yuy2";
     case PIXMAN_yv12: return "yv12";
+
+    default: break;
     };
 
     /* Fake formats.
