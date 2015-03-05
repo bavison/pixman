@@ -468,6 +468,7 @@
     tst         DST_R, #0xF
     beq         2f
 
+.if src_bpp > 0 || mask_bpp > 0 || dst_r_bpp > 0
 .irp lowbit, 1, 2, 4, 8, 16
 local skip1
 .if (dst_w_bpp <= (lowbit * 8)) && ((lowbit * 8) < (pixblock_size * dst_w_bpp))
@@ -487,6 +488,7 @@ local skip1
 1:
 .endif
 .endr
+.endif
     pixdeinterleave src_bpp, src_basereg
     pixdeinterleave mask_bpp, mask_basereg
     pixdeinterleave dst_r_bpp, dst_r_basereg
@@ -502,6 +504,9 @@ local skip1
 .if lowbit < 16 /* we don't need more than 16-byte alignment */
     tst         DST_W, #lowbit
     beq         1f
+.endif
+.if src_bpp == 0 && mask_bpp == 0 && dst_r_bpp == 0
+    sub         W, W, #(lowbit * 8 / dst_w_bpp)
 .endif
     pixst_a     (lowbit * 8 / dst_w_bpp), dst_w_bpp, dst_w_basereg, DST_W
 1:
@@ -533,6 +538,7 @@ local skip1
                                process_pixblock_tail_head
     tst         W, #(pixblock_size - 1)
     beq         2f
+.if src_bpp > 0 || mask_bpp > 0 || dst_r_bpp > 0
 .irp chunk_size, 16, 8, 4, 2, 1
 .if pixblock_size > chunk_size
     tst         W, #chunk_size
@@ -550,6 +556,7 @@ local skip1
 1:
 .endif
 .endr
+.endif
     pixdeinterleave src_bpp, src_basereg
     pixdeinterleave mask_bpp, mask_basereg
     pixdeinterleave dst_r_bpp, dst_r_basereg
