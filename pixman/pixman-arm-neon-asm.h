@@ -183,6 +183,10 @@
     pixldst30 vst3, 8, %(basereg+0), %(basereg+1), %(basereg+2), 3, mem_operand
 .elseif (bpp == 24) && (numpix == 1)
     pixldst30 vst3, 8, %(basereg+0), %(basereg+1), %(basereg+2), 1, mem_operand
+.elseif numpix * bpp == 32 && abits == 32
+    pixldst 4, vst1, 32, basereg, mem_operand, abits
+.elseif numpix * bpp == 16 && abits == 16
+    pixldst 2, vst1, 16, basereg, mem_operand, abits
 .else
     pixldst %(numpix * bpp / 8), vst1, %(bpp), basereg, mem_operand, abits
 .endif
