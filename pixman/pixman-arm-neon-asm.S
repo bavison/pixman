@@ -396,11 +396,10 @@ generate_composite_function \
 
 .macro pixman_composite_over_n_0565_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d3[0]}, [DUMMY]
-    vdup.8      d0, d3[0]
-    vdup.8      d1, d3[1]
-    vdup.8      d2, d3[2]
-    vdup.8      d3, d3[3]
+    vld1.8      {d0[]}, [DUMMY]!
+    vld1.8      {d1[]}, [DUMMY]!
+    vld1.8      {d2[]}, [DUMMY]!
+    vld1.8      {d3[]}, [DUMMY]!
     vmvn.8      d3, d3      /* invert source alpha */
 .endm
 
@@ -761,11 +760,10 @@ generate_composite_function_single_scanline \
 
 .macro pixman_composite_over_n_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d3[0]}, [DUMMY]
-    vdup.8      d0, d3[0]
-    vdup.8      d1, d3[1]
-    vdup.8      d2, d3[2]
-    vdup.8      d3, d3[3]
+    vld1.8      {d0[]}, [DUMMY]!
+    vld1.8      {d1[]}, [DUMMY]!
+    vld1.8      {d2[]}, [DUMMY]!
+    vld1.8      {d3[]}, [DUMMY]!
     vmvn.8      d24, d3  /* get inverted alpha */
 .endm
 
@@ -813,11 +811,10 @@ generate_composite_function \
 
 .macro pixman_composite_over_reverse_n_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d7[0]}, [DUMMY]
-    vdup.8      d4, d7[0]
-    vdup.8      d5, d7[1]
-    vdup.8      d6, d7[2]
-    vdup.8      d7, d7[3]
+    vld1.8      {d4[]}, [DUMMY]!
+    vld1.8      {d5[]}, [DUMMY]!
+    vld1.8      {d6[]}, [DUMMY]!
+    vld1.8      {d7[]}, [DUMMY]!
 .endm
 
 generate_composite_function \
@@ -956,11 +953,10 @@ generate_composite_function \
 .macro pixman_composite_over_n_8_0565_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
     vpush       {d8-d15}
-    vld1.32     {d11[0]}, [DUMMY]
-    vdup.8      d8, d11[0]
-    vdup.8      d9, d11[1]
-    vdup.8      d10, d11[2]
-    vdup.8      d11, d11[3]
+    vld1.8      {d8[]}, [DUMMY]!
+    vld1.8      {d9[]}, [DUMMY]!
+    vld1.8      {d10[]}, [DUMMY]!
+    vld1.8      {d11[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_over_n_8_0565_cleanup
@@ -981,10 +977,9 @@ generate_composite_function \
 /******************************************************************************/
 
 .macro pixman_composite_over_8888_n_0565_init
-    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 8)
+    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 11)
     vpush       {d8-d15}
-    vld1.32     {d24[0]}, [DUMMY]
-    vdup.8      d24, d24[3]
+    vld1.8      {d24[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_over_8888_n_0565_cleanup
@@ -1049,12 +1044,8 @@ generate_composite_function \
 
 .macro pixman_composite_src_n_8_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d0[0]}, [DUMMY]
-    vsli.u64    d0, d0, #8
-    vsli.u64    d0, d0, #16
-    vsli.u64    d0, d0, #32
-    vorr        d1, d0, d0
-    vorr        q1, q0, q0
+    vld1.8      {d0[],d1[]}, [DUMMY]
+    vld1.8      {d2[],d3[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_src_n_8_cleanup
@@ -1089,11 +1080,8 @@ generate_composite_function \
 
 .macro pixman_composite_src_n_0565_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d0[0]}, [DUMMY]
-    vsli.u64    d0, d0, #16
-    vsli.u64    d0, d0, #32
-    vorr        d1, d0, d0
-    vorr        q1, q0, q0
+    vld1.16     {d0[],d1[]}, [DUMMY]
+    vld1.16     {d2[],d3[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_src_n_0565_cleanup
@@ -1128,10 +1116,8 @@ generate_composite_function \
 
 .macro pixman_composite_src_n_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d0[0]}, [DUMMY]
-    vsli.u64    d0, d0, #32
-    vorr        d1, d0, d0
-    vorr        q1, q0, q0
+    vld1.32     {d0[],d1[]}, [DUMMY]
+    vld1.32     {d2[],d3[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_src_n_8888_cleanup
@@ -1271,11 +1257,10 @@ generate_composite_function \
 
 .macro pixman_composite_src_n_8_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d3[0]}, [DUMMY]
-    vdup.8      d0, d3[0]
-    vdup.8      d1, d3[1]
-    vdup.8      d2, d3[2]
-    vdup.8      d3, d3[3]
+    vld1.8      {d0[]}, [DUMMY]!
+    vld1.8      {d1[]}, [DUMMY]!
+    vld1.8      {d2[]}, [DUMMY]!
+    vld1.8      {d3[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_src_n_8_8888_cleanup
@@ -1339,9 +1324,8 @@ generate_composite_function \
 .endm
 
 .macro pixman_composite_src_n_8_8_init
-    add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d16[0]}, [DUMMY]
-    vdup.8      d16, d16[3]
+    add         DUMMY, sp, #ARGS_STACK_OFFSET + 3
+    vld1.8      {d16[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_src_n_8_8_cleanup
@@ -1449,11 +1433,10 @@ generate_composite_function \
 .macro pixman_composite_over_n_8_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
     vpush       {d8-d15}
-    vld1.32     {d11[0]}, [DUMMY]
-    vdup.8      d8, d11[0]
-    vdup.8      d9, d11[1]
-    vdup.8      d10, d11[2]
-    vdup.8      d11, d11[3]
+    vld1.8      {d8[]}, [DUMMY]!
+    vld1.8      {d9[]}, [DUMMY]!
+    vld1.8      {d10[]}, [DUMMY]!
+    vld1.8      {d11[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_over_n_8_8888_cleanup
@@ -1518,10 +1501,9 @@ generate_composite_function \
 .endm
 
 .macro pixman_composite_over_n_8_8_init
-    add         DUMMY, sp, #ARGS_STACK_OFFSET
+    add         DUMMY, sp, #ARGS_STACK_OFFSET + 3
     vpush       {d8-d15}
-    vld1.32     {d8[0]}, [DUMMY]
-    vdup.8      d8, d8[3]
+    vld1.8      {d8[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_over_n_8_8_cleanup
@@ -1621,11 +1603,10 @@ generate_composite_function \
 .macro pixman_composite_over_n_8888_8888_ca_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
     vpush       {d8-d15}
-    vld1.32     {d11[0]}, [DUMMY]
-    vdup.8      d8, d11[0]
-    vdup.8      d9, d11[1]
-    vdup.8      d10, d11[2]
-    vdup.8      d11, d11[3]
+    vld1.8      {d8[]}, [DUMMY]!
+    vld1.8      {d9[]}, [DUMMY]!
+    vld1.8      {d10[]}, [DUMMY]!
+    vld1.8      {d11[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_over_n_8888_8888_ca_cleanup
@@ -1790,11 +1771,10 @@ generate_composite_function \
 .macro pixman_composite_over_n_8888_0565_ca_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
     vpush       {d8-d15}
-    vld1.32     {d11[0]}, [DUMMY]
-    vdup.8      d8, d11[0]
-    vdup.8      d9, d11[1]
-    vdup.8      d10, d11[2]
-    vdup.8      d11, d11[3]
+    vld1.8      {d8[]}, [DUMMY]!
+    vld1.8      {d9[]}, [DUMMY]!
+    vld1.8      {d10[]}, [DUMMY]!
+    vld1.8      {d11[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_over_n_8888_0565_ca_cleanup
@@ -1843,9 +1823,8 @@ generate_composite_function \
 .endm
 
 .macro pixman_composite_in_n_8_init
-    add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d3[0]}, [DUMMY]
-    vdup.8      d3, d3[3]
+    add         DUMMY, sp, #ARGS_STACK_OFFSET + 3
+    vld1.8      {d3[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_in_n_8_cleanup
@@ -1901,10 +1880,9 @@ generate_composite_function \
 .endm
 
 .macro pixman_composite_add_n_8_8_init
-    add         DUMMY, sp, #ARGS_STACK_OFFSET
+    add         DUMMY, sp, #ARGS_STACK_OFFSET + 3
     vpush       {d8-d15}
-    vld1.32     {d11[0]}, [DUMMY]
-    vdup.8      d11, d11[3]
+    vld1.8      {d11[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_add_n_8_8_cleanup
@@ -2069,11 +2047,10 @@ generate_composite_function \
 
 .macro pixman_composite_add_n_8_8888_init
     add         DUMMY, sp, #ARGS_STACK_OFFSET
-    vld1.32     {d3[0]}, [DUMMY]
-    vdup.8      d0, d3[0]
-    vdup.8      d1, d3[1]
-    vdup.8      d2, d3[2]
-    vdup.8      d3, d3[3]
+    vld1.8      {d0[]}, [DUMMY]!
+    vld1.8      {d1[]}, [DUMMY]!
+    vld1.8      {d2[]}, [DUMMY]!
+    vld1.8      {d3[]}, [DUMMY]!
 .endm
 
 .macro pixman_composite_add_n_8_8888_cleanup
@@ -2097,9 +2074,8 @@ generate_composite_function \
 /******************************************************************************/
 
 .macro pixman_composite_add_8888_n_8888_init
-    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 8)
-    vld1.32     {d27[0]}, [DUMMY]
-    vdup.8      d27, d27[3]
+    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 11)
+    vld1.8      {d27[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_add_8888_n_8888_cleanup
@@ -2207,10 +2183,9 @@ generate_composite_function_single_scanline \
 .endm
 
 .macro pixman_composite_over_8888_n_8888_init
-    add         DUMMY, sp, #48
+    add         DUMMY, sp, #48 + 3
     vpush       {d8-d15}
-    vld1.32     {d15[0]}, [DUMMY]
-    vdup.8      d15, d15[3]
+    vld1.8      {d15[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_over_8888_n_8888_cleanup
@@ -2579,10 +2554,9 @@ generate_composite_function \
 /******************************************************************************/
 
 .macro pixman_composite_over_0565_n_0565_init
-    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 8)
+    add         DUMMY, sp, #(ARGS_STACK_OFFSET + 11)
     vpush       {d8-d15}
-    vld1.32     {d15[0]}, [DUMMY]
-    vdup.8      d15, d15[3]
+    vld1.8      {d15[]}, [DUMMY]
 .endm
 
 .macro pixman_composite_over_0565_n_0565_cleanup
