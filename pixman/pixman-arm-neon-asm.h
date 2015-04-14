@@ -881,6 +881,15 @@ local skip1
  * nor prefetch are used.
  */
 8:
+.if src_bpp_shift >= 0
+    PF pld, [SRC, SRC_STRIDE, lsl #src_bpp_shift]
+.endif
+.if dst_r_bpp != 0
+    PF pld, [DST_R, DST_STRIDE, lsl #dst_bpp_shift]
+.endif
+.if mask_bpp_shift >= 0
+    PF pld, [MASK, MASK_STRIDE, lsl #mask_bpp_shift]
+.endif
     /* Process exactly pixblock_size pixels if needed */
     tst         W, #pixblock_size
     beq         1f
