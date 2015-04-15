@@ -3233,6 +3233,70 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro pixman_composite_in_n_8888_init
+    add         DUMMY, sp, #ARGS_STACK_OFFSET
+    vld1.8      {d0[]}, [DUMMY]!
+    vld1.8      {d1[]}, [DUMMY]!
+    vld1.8      {d2[]}, [DUMMY]!
+    vld1.8      {d3[]}, [DUMMY]!
+.endm
+
+.macro pixman_composite_in_n_8888_process_pixblock_head
+    /* src is in d0-d3 (deinterleaved) */
+    /* destination pixel data is in d4-d7 (deinterleaved, though we only need alpha from d7) */
+    vmull.u8    q11, d3, d7
+    vmull.u8    q10, d2, d7
+    vmull.u8    q9, d1, d7
+    vmull.u8    q8, d0, d7
+    vrshr.u16   q15, q11, #8
+    vrshr.u16   q14, q10, #8
+    vrshr.u16   q13, q9, #8
+    vrshr.u16   q12, q8, #8
+    vraddhn.u16 d31, q11, q15
+    vraddhn.u16 d30, q10, q14
+    vraddhn.u16 d28, q8, q12
+    vraddhn.u16 d29, q9, q13
+.endm
+
+.macro pixman_composite_in_n_8888_process_pixblock_tail
+    /* result is in d28-d31 */
+.endm
+
+.macro pixman_composite_in_n_8888_process_pixblock_tail_head
+        vld4.8      {d4-d7}, [DST_R :128]!
+            cache_preload 8, 8
+    vzip.8      d28, d30
+        vmull.u8    q11, d3, d7
+    vzip.8      d29, d31
+        vmull.u8    q10, d2, d7
+        vmull.u8    q9, d1, d7
+        vmull.u8    q8, d0, d7
+    vzip.8      d28, d29
+    vzip.8      d30, d31
+    vst1.8      {d28-d31}, [DST_W :128]!
+        vrshr.u16   q15, q11, #8
+        vrshr.u16   q14, q10, #8
+        vrshr.u16   q13, q9, #8
+        vrshr.u16   q12, q8, #8
+        vraddhn.u16 d31, q11, q15
+        vraddhn.u16 d30, q10, q14
+        vraddhn.u16 d28, q8, q12
+        vraddhn.u16 d29, q9, q13
+.endm
+
+generate_composite_function \
+    pixman_composite_in_n_8888_asm_neon, 0, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    6, /* prefetch distance */ \
+    pixman_composite_in_n_8888_init, \
+    default_cleanup, \
+    pixman_composite_in_n_8888_process_pixblock_head, \
+    pixman_composite_in_n_8888_process_pixblock_tail, \
+    pixman_composite_in_n_8888_process_pixblock_tail_head
+
+/******************************************************************************/
+
 .macro pixman_composite_src_1555_8888_process_pixblock_head
     /* src is in d0-d1 */
     vshrn.i16   d31, q0, #8
