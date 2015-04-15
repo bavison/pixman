@@ -2830,6 +2830,63 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro pixman_composite_in_reverse_8888_8888_process_pixblock_head
+    /* src is in d0-d3 (deinterleaved, though we only need alpha from d3) */
+    /* destination pixel data is in d4-d7 (deinterleaved) */
+    vmull.u8    q10, d6, d3
+    vmull.u8    q11, d7, d3
+    vmull.u8    q9, d5, d3
+    vmull.u8    q8, d4, d3
+    vrshr.u16   q15, q11, #8
+    vrshr.u16   q14, q10, #8
+    vrshr.u16   q13, q9, #8
+    vrshr.u16   q12, q8, #8
+    vraddhn.u16 d31, q11, q15
+    vraddhn.u16 d30, q10, q14
+    vraddhn.u16 d28, q8, q12
+    vraddhn.u16 d29, q9, q13
+.endm
+
+.macro pixman_composite_in_reverse_8888_8888_process_pixblock_tail
+    /* result is in d28-d31 */
+.endm
+
+.macro pixman_composite_in_reverse_8888_8888_process_pixblock_tail_head
+        vld4.8      {d0-d3}, [SRC]!
+    vzip.8      d28, d30
+        vld4.8      {d4-d7}, [DST_R :128]!
+            cache_preload 8, 8
+    vzip.8      d29, d31
+        vmull.u8    q10, d6, d3
+        vmull.u8    q11, d7, d3
+        vmull.u8    q9, d5, d3
+        vmull.u8    q8, d4, d3
+    vzip.8      d28, d29
+    vzip.8      d30, d31
+    vst1.8      {d28-d31}, [DST_W :128]!
+        vrshr.u16   q15, q11, #8
+        vrshr.u16   q14, q10, #8
+        vrshr.u16   q13, q9, #8
+        vrshr.u16   q12, q8, #8
+        vraddhn.u16 d31, q11, q15
+        vraddhn.u16 d30, q10, q14
+        vraddhn.u16 d28, q8, q12
+        vraddhn.u16 d29, q9, q13
+.endm
+
+generate_composite_function \
+    pixman_composite_in_reverse_8888_8888_asm_neon, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    3, /* prefetch distance */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_head, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_tail, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_tail_head
+
+/******************************************************************************/
+
 generate_composite_function_nearest_scanline \
     pixman_scaled_nearest_scanline_8888_8888_OVER_asm_neon, 32, 0, 32, \
     FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
