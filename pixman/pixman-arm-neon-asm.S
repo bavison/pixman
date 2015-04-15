@@ -667,6 +667,17 @@ generate_composite_function_single_scanline \
     pixman_composite_in_out_process_pixblock_tail_head  0, 1
 .endm
 
+generate_composite_function \
+    pixman_composite_in_reverse_8888_8888_asm_neon, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    3, /* prefetch distance */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_head, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_tail, \
+    pixman_composite_in_reverse_8888_8888_process_pixblock_tail_head
+
 generate_composite_function_single_scanline \
     pixman_composite_scanline_in_reverse_asm_neon, 32, 0, 32, \
     FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
