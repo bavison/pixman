@@ -2887,6 +2887,57 @@ generate_composite_function \
 
 /******************************************************************************/
 
+.macro pixman_composite_src_1555_8888_process_pixblock_head
+    /* src is in d0-d1 */
+    vshrn.i16   d31, q0, #8
+    vshrn.u16   d29, q0, #2
+    vshrn.i16   d30, q0, #7
+    vsli.u16    q0, q0, #5
+    vshr.s8     d31, d31, #7
+    vsri.8      d29, d29, #5
+    vsri.8      d30, d30, #5
+    vshrn.u16   d28, q0, #2
+.endm
+
+.macro pixman_composite_src_1555_8888_process_pixblock_tail
+    vzip.8      d29, d31
+    vzip.8      d28, d30
+    vzip.8      d28, d29
+    vzip.8      d30, d31
+    /* result is in d28-d31 */
+.endm
+
+.macro pixman_composite_src_1555_8888_process_pixblock_tail_head
+    vzip.8      d29, d31
+    vzip.8      d28, d30
+        vld1.16     {d0-d1}, [SRC]!
+            cache_preload 8, 8
+    vzip.8      d28, d29
+    vzip.8      d30, d31
+    vst1.8      {d28-d31}, [DST_W :128]!
+        vshrn.i16   d31, q0, #8
+        vshrn.u16   d29, q0, #2
+        vshrn.i16   d30, q0, #7
+        vsli.u16    q0, q0, #5
+        vshr.s8     d31, d31, #7
+        vsri.8      d29, d29, #5
+        vsri.8      d30, d30, #5
+        vshrn.u16   d28, q0, #2
+.endm
+
+generate_composite_function \
+    pixman_composite_src_1555_8888_asm_neon, 16, 0, 32, \
+    FLAG_DST_WRITEONLY, \
+    8, /* number of pixels, processed in a single block */ \
+    6, /* prefetch distance */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_src_1555_8888_process_pixblock_head, \
+    pixman_composite_src_1555_8888_process_pixblock_tail, \
+    pixman_composite_src_1555_8888_process_pixblock_tail_head
+
+/******************************************************************************/
+
 generate_composite_function_nearest_scanline \
     pixman_scaled_nearest_scanline_8888_8888_OVER_asm_neon, 32, 0, 32, \
     FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
