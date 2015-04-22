@@ -78,6 +78,7 @@ test/scaling-crash-test
 test/scaling-helpers-test
 test/scaling-test
 test/screen-test
+test/solid-test
 test/stress-test
 test/trap-crasher
 test/trap-test
