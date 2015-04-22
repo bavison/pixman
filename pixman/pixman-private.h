@@ -769,7 +769,8 @@ _pixman_iter_init_bits_stride (pixman_iter_t *iter, const pixman_iter_info_t *in
 #define FAST_PATH_STD_DEST_FLAGS					\
     (FAST_PATH_NO_ACCESSORS		|				\
      FAST_PATH_NO_ALPHA_MAP		|				\
-     FAST_PATH_NARROW_FORMAT)
+     FAST_PATH_NARROW_FORMAT            |                               \
+     FAST_PATH_BITS_IMAGE)
 
 #define SOURCE_FLAGS(format)						\
     (FAST_PATH_STANDARD_FLAGS |						\
