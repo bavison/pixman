@@ -186,9 +186,9 @@
 
 .macro bilinear_store_8888 numpix, tmp1, tmp2
 .if numpix == 4
-    vst1.32   {d0, d1}, [OUT]!
+    vst1.32   {d0, d1}, [OUT, :128]!
 .elseif numpix == 2
-    vst1.32   {d0}, [OUT]!
+    vst1.32   {d0}, [OUT, :64]!
 .elseif numpix == 1
     vst1.32   {d0[0]}, [OUT, :32]!
 .else
@@ -203,11 +203,11 @@
     vuzp.u8 d0, d2
     convert_8888_to_0565 d2, d1, d0, q1, tmp1, tmp2
 .if numpix == 4
-    vst1.16   {d2}, [OUT]!
+    vst1.16   {d2}, [OUT, :64]!
 .elseif numpix == 2
-    vst1.32   {d2[0]}, [OUT]!
+    vst1.32   {d2[0]}, [OUT, :32]!
 .elseif numpix == 1
-    vst1.16   {d2[0]}, [OUT]!
+    vst1.16   {d2[0]}, [OUT, :16]!
 .else
     .error bilinear_store_0565 numpix is unsupported
 .endif
@@ -251,11 +251,11 @@
 
 .macro bilinear_load_dst_8888 numpix, dst0, dst1, dst01
 .if numpix == 4
-    vld1.32     {dst0, dst1}, [OUT]
+    vld1.32     {dst0, dst1}, [OUT, :128]
 .elseif numpix == 2
-    vld1.32     {dst0}, [OUT]
+    vld1.32     {dst0}, [OUT, :64]
 .elseif numpix == 1
-    vld1.32     {dst0[0]}, [OUT]
+    vld1.32     {dst0[0]}, [OUT, :32]
 .else
     .error bilinear_load_dst_8888 numpix is unsupported
 .endif
