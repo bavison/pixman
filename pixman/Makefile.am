@@ -88,7 +88,8 @@ libpixman_arm_neon_la_SOURCES = \
         pixman-arm-neon-asm.S	\
 		pixman-arm-neon-asm-bilinear.S \
         pixman-arm-asm.h	\
-        pixman-arm-neon-asm.h
+        pixman-arm-neon-asm.h	\
+        pixman-arm-neon-asm-bilinear.h
 libpixman_1_la_LIBADD += libpixman-arm-neon.la
 
 ASM_CFLAGS_arm_neon=
