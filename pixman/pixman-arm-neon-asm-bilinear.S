@@ -1214,8 +1214,30 @@ generate_bilinear_scanline_func \
 
 /******************************************************************************/
 
+.macro init_x8r8g8b8_a8r8g8b8
+        vpush       {d14-d15}
+        vmov.u32    q7, #0xff000000
+.endm
+
+.macro final_x8r8g8b8_a8r8g8b8
+        vpop        {d14-d15}
+.endm
+
+.macro convert_x8r8g8b8_a8r8g8b8_8pix_internal  out, in
+        vorr.i32    q&out, q&in, q7
+.endm
+
+.macro convert_x8r8g8b8_a8r8g8b8_8pix  out, in
+        convert_x8r8g8b8_a8r8g8b8_8pix_internal  %((out) / 2), %((in) / 2)
+        convert_x8r8g8b8_a8r8g8b8_8pix_internal  %((out) / 2 + 1), %((in) / 2 + 1)
+.endm
+
 generate_bilinear_scaled_cover_functions \
     32, a8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4
+
+generate_bilinear_scaled_cover_functions \
+    32, x8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4, convert_x8r8g8b8_a8r8g8b8_8pix, \
+    nop_macro, init_x8r8g8b8_a8r8g8b8, final_x8r8g8b8_a8r8g8b8
 
 /* void
  * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_neon (
