@@ -1259,6 +1259,23 @@ generate_bilinear_scanline_func \
  .endr
 .endm
 
+.macro my_vshll  qd, dm, imm
+        vshll.i&imm  q&qd, d&dm, #imm
+.endm
+
+.macro convert_a8_a8r8g8b8_8pix_step1  out, in
+        my_vshll  %((out)/2+1), %(in), 8
+.endm
+
+.macro convert_a8_a8r8g8b8_8pix_step2  base0, base1
+        my_vshll  %((base0)/2), %((base0)+2), 16
+        my_vshll  %((base0)/2+1), %((base0)+3), 16
+ .ifnc "base1",""
+        my_vshll  %((base1)/2), %((base1)+2), 16
+        my_vshll  %((base1)/2+1), %((base1)+3), 16
+ .endif
+.endm
+
 generate_bilinear_scaled_cover_functions \
     32, a8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4
 
@@ -1268,6 +1285,9 @@ generate_bilinear_scaled_cover_functions \
 
 generate_bilinear_scaled_cover_functions \
     16, r5g6b5, 4, 4, 4, 4, 4, 4, 4, 4, convert_r5g6b5_a8r8g8b8_8pix, pack_planar
+
+generate_bilinear_scaled_cover_functions \
+    8, a8, 4, 4, 4, 4, 4, 4, 4, 4, convert_a8_a8r8g8b8_8pix_step1, convert_a8_a8r8g8b8_8pix_step2
 
 /* void
  * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_neon (
