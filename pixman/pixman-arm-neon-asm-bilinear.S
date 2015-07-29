@@ -1232,12 +1232,42 @@ generate_bilinear_scanline_func \
         convert_x8r8g8b8_a8r8g8b8_8pix_internal  %((out) / 2 + 1), %((in) / 2 + 1)
 .endm
 
+.macro convert_r5g6b5_a8r8g8b8_8pix_internal  b, g, r, a, in
+        vshrn.i16   d&r, q&in, #8    @ rrrrrggg
+        vshrn.i16   d&g, q&in, #3    @ ggggggbb
+        vsli.16     q&in, q&in, #5   @ ggggggbbbbbbbbbb
+        vsri.8      d&r, d&r, #5     @ rrrrrrrr
+        vsri.8      d&g, d&g, #6     @ gggggggg
+        vmov.i8     d&a, #255
+        vshrn.i16   d&b, q&in, #2    @ bbbbbbbb
+.endm
+
+.macro convert_r5g6b5_a8r8g8b8_8pix  out, in
+        convert_r5g6b5_a8r8g8b8_8pix_internal  %(out), %((out)+1), %((out)+2), %((out)+3), %((in)/2)
+.endm
+
+.macro my_vzip8q  a, b
+        vzip.8      q&a, q&b
+.endm
+
+.macro pack_planar  base0, base1
+ .rept 2
+        my_vzip8q   %((base0)/2), %((base0)/2 + 1)
+  .ifnc "base1",""
+        my_vzip8q   %((base1)/2), %((base1)/2 + 1)
+  .endif
+ .endr
+.endm
+
 generate_bilinear_scaled_cover_functions \
     32, a8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4
 
 generate_bilinear_scaled_cover_functions \
     32, x8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4, convert_x8r8g8b8_a8r8g8b8_8pix, \
     nop_macro, init_x8r8g8b8_a8r8g8b8, final_x8r8g8b8_a8r8g8b8
+
+generate_bilinear_scaled_cover_functions \
+    16, r5g6b5, 4, 4, 4, 4, 4, 4, 4, 4, convert_r5g6b5_a8r8g8b8_8pix, pack_planar
 
 /* void
  * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_neon (
