@@ -1277,17 +1277,17 @@ generate_bilinear_scanline_func \
 .endm
 
 generate_bilinear_scaled_cover_functions \
-    32, a8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4
+    32, a8r8g8b8, 0, 4, 4, 4, 4, 4, 4, 4, 4
 
 generate_bilinear_scaled_cover_functions \
-    32, x8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4, convert_x8r8g8b8_a8r8g8b8_8pix, \
+    32, x8r8g8b8, 0, 4, 4, 4, 4, 4, 4, 4, 4, convert_x8r8g8b8_a8r8g8b8_8pix, \
     nop_macro, init_x8r8g8b8_a8r8g8b8, final_x8r8g8b8_a8r8g8b8
 
 generate_bilinear_scaled_cover_functions \
-    16, r5g6b5, 4, 4, 4, 4, 4, 4, 4, 4, convert_r5g6b5_a8r8g8b8_8pix, pack_planar
+    16, r5g6b5, 1, 4, 4, 4, 4, 4, 4, 4, 4, convert_r5g6b5_a8r8g8b8_8pix, pack_planar
 
 generate_bilinear_scaled_cover_functions \
-    8, a8, 4, 4, 4, 4, 4, 4, 4, 4, convert_a8_a8r8g8b8_8pix_step1, convert_a8_a8r8g8b8_8pix_step2
+    8, a8, 0, 4, 4, 4, 4, 4, 4, 4, 4, convert_a8_a8r8g8b8_8pix_step1, convert_a8_a8r8g8b8_8pix_step2
 
 /* void
  * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_neon (
