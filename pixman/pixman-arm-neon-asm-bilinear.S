@@ -1214,6 +1214,9 @@ generate_bilinear_scanline_func \
 
 /******************************************************************************/
 
+generate_bilinear_scaled_cover_functions \
+    32, a8r8g8b8, 4, 4, 4, 4, 4, 4, 4, 4
+
 /* void
  * pixman_get_scanline_bilinear_scaled_cover_pass2_asm_neon (
  *                                               uint32_t  width,

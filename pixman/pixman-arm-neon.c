@@ -232,6 +232,8 @@ PIXMAN_ARM_DECLARE_BILINEAR_SCALED_SUPPORT(neon)
 #define PIXMAN_ARM_BILINEAR_GRANULE 8
 #define PIXMAN_ARM_BILINEAR_PADDING_BITS (15 - BILINEAR_INTERPOLATION_BITS)
 
+PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COVER(neon, a8r8g8b8, uint32_t)
+
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
                                    int32_t   h,
@@ -541,6 +543,7 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
 static const pixman_iter_info_t arm_neon_iters[] =
 {
     PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (neon, a8r8g8b8),
+    PIXMAN_ARM_BILINEAR_SCALED_FETCHER (neon, a8r8g8b8),
 
     PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (neon, x8r8g8b8),
 
