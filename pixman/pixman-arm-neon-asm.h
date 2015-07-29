@@ -1266,3 +1266,6 @@ local skip1
     vsri.u16    out0, tmp,  #8  /* G & B is in place */
     vzip.u16    out0, out1      /* everything is in place */
 .endm
+
+.macro nop_macro x:vararg
+.endm
