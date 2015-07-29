@@ -203,6 +203,27 @@ PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, x8r8g8b8, x888, uint32_
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, r5g6b5,   0565, uint16_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, a8,       8,    uint8_t)
 
+static inline void
+neon_store_part_interpolated (int16_t *dest, uint32_t ag, uint32_t rb)
+{
+    *(uint32_t *)(dest+0) = (ag << 16) | (rb & 0xffff);
+    *(uint32_t *)(dest+2) = (ag & 0xffff0000) | (rb >> 16);
+}
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#endif
+
+PIXMAN_ARM_DECLARE_BILINEAR_SCALED_SUPPORT(neon)
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
+#define PIXMAN_ARM_BILINEAR_GRANULE 8
+#define PIXMAN_ARM_BILINEAR_PADDING_BITS (15 - BILINEAR_INTERPOLATION_BITS)
+
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
                                    int32_t   h,

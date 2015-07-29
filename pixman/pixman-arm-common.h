@@ -807,7 +807,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
     pixman_arm_bilinear_info_t *info   = iter->data;                                        \
     int                         y0     = pixman_fixed_to_int (info->y);                     \
     int                         y1     = y0 + 1;                                            \
-    int                         i      = y0 & 1;                                            \
+    int                         i;                                                          \
     int                         width  = iter->width;                                       \
     pixman_fixed_t              fx     = info->x;                                           \
     pixman_fixed_t              ux     = iter->image->common.transform->matrix[0][0];       \
@@ -821,12 +821,14 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
     frac_bits = BILINEAR_INTERPOLATION_BITS + PIXMAN_ARM_BILINEAR_PADDING_BITS;             \
     dist_y = (info->y >> (16 - frac_bits)) &                                                \
               ((1 << frac_bits) - (1 << PIXMAN_ARM_BILINEAR_PADDING_BITS));                 \
+    info->y += iter->image->common.transform->matrix[1][1];                                 \
+                                                                                            \
+    i = y0 & 1;                                                                             \
     if (i)                                                                                  \
     {                                                                                       \
         /* Invert weight if upper scanline is in second buffer */                           \
         dist_y = (1 << frac_bits) - dist_y;                                                 \
     }                                                                                       \
-    info->y += iter->image->common.transform->matrix[1][1];                                 \
                                                                                             \
     if (info->line_y[i] != y0)                                                              \
     {                                                                                       \
