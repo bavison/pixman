@@ -443,16 +443,376 @@ DDIST   .req    d3
 .endfunc
 .endm
 
+.macro bilinear_enlarge_label  fname, width_mod_8, leading, in_remain, out_remain
+.L&fname&_&width_mod_8&_&leading&_&in_remain&_&out_remain:
+.endm
+
+.macro bilinear_enlarge_jump_table_offset  fname, width_mod_8, leading, in_remain, out_remain
+        .word       .L&fname&_&width_mod_8&_&leading&_&in_remain&_&out_remain - (0b + 4)
+.endm
+
+.macro bilinear_enlarge_branch  cond, fname, width_mod_8, leading, in_remain, out_remain
+        b&cond      .L&fname&_&width_mod_8&_&leading&_&in_remain&_&out_remain
+.endm
+
+.macro bilinear_enlarge_adr  cond, r, fname, width_mod_8, leading, in_remain, out_remain
+        adr&cond&l  r, .L&fname&_&width_mod_8&_&leading&_&in_remain&_&out_remain
+.endm
+
+.macro my_vmovd  dd, dm
+        vmov        d&dd, d&dm
+.endm
+
+.macro my_vext8d  dd, dn, dm, imm
+        vext.8      d&dd, d&dn, d&dm, #imm
+.endm
+
+.macro my_vstmd  base, dlo, dhi
+ .if dlo == dhi
+        vstmia      base, {d&dlo}
+ .else
+        vstmia      base, {d&dlo-d&dhi}
+ .endif
+.endm
+
+.macro bilinear_enlarge_main_loop  fname, max_out_remain, width_mod_8, leading
+ .set in_remain, 9
+ .rept 8
+
+  .set out_remain, max_out_remain
+  .rept max_out_remain
+
+        bilinear_enlarge_label fname, %(width_mod_8), %(leading), %(in_remain), %(out_remain)
+   .if ((in_remain) & 1) == 0
+        my_vmovd    %(32-out_remain), %(6-in_remain/2)
+   .else
+        my_vext8d   %(32-out_remain), %(5-in_remain/2), %(6-in_remain/2), 4
+   .endif
+   .if out_remain > 1
+        subs        ACCUM, ACCUM, UX, lsl #16
+    .if in_remain == 2
+        bilinear_enlarge_adr  cc, lr, fname, %(width_mod_8), %(leading), 9, %(out_remain - 1)
+        bcc         80f
+    .else
+        bilinear_enlarge_branch  cc, fname, %(width_mod_8), %(leading), %(in_remain - 1), %(out_remain - 1)
+    .endif
+   .endif
+
+   .set out_remain, out_remain - 1
+  .endr
+
+  .if (max_out_remain >= 6)
+        vuzp.32     q12, q13
+  .elseif (max_out_remain == 5)
+        vuzp.32     d25, d27
+  .endif
+  .if (max_out_remain >= 2)
+        vuzp.32     q14, q15
+  .elseif (max_out_remain == 1)
+        vuzp.32     d29, d31
+  .endif
+  .if max_out_remain == 8
+        interpolate_horizontal  4, 24, 25, 26, 27, 1
+   .if width_mod_8 < 4
+        my_vstmd    DST!, 16, 19
+   .else
+    .if width_mod_8 != 4
+        add         ip, DST, #96 - (width_mod_8 - 4) * 8
+    .endif
+        my_vstmd    DST, 16, %(19 - (width_mod_8 - 4))
+        add         DST, DST, #96
+    .if width_mod_8 != 4
+        my_vstmd    ip, %(20 - (width_mod_8 - 4)), 19
+    .endif
+   .endif
+        interpolate_horizontal  4, 28, 29, 30, 31, 1
+   .if width_mod_8 >= 4
+        my_vstmd    DST!, 16, 19
+   .else
+    .if width_mod_8 != 0
+        add         ip, DST, #96 - width_mod_8 * 8
+    .endif
+        my_vstmd    DST, 16, %(19 - width_mod_8)
+        add         DST, DST, #96
+    .if width_mod_8 != 0
+        my_vstmd    ip, %(20 - width_mod_8), 19
+    .endif
+   .endif
+  .elseif max_out_remain >= 5
+        interpolate_horizontal  (max_out_remain - 4), 24, 25, 26, 27, 1
+        my_vstmd    DST!, %(24 - max_out_remain), 19
+        interpolate_horizontal  4, 28, 29, 30, 31, 1
+        my_vstmd    DST!, 16, 19
+  .else
+        interpolate_horizontal  max_out_remain, 28, 29, 30, 31, 1
+        my_vstmd    DST!, %(20 - max_out_remain), 19
+  .endif
+        subs        COUNT, COUNT, #8
+        bcc         99f
+        subs        ACCUM, ACCUM, UX, lsl #16
+        bilinear_enlarge_branch  cs, fname, %(width_mod_8), 0, %(in_remain), 8
+  .if in_remain == 2
+        bilinear_enlarge_adr  , lr, fname, %(width_mod_8), 0, 9, 8
+        b           80f
+  .elseif max_out_remain < 8
+        bilinear_enlarge_branch  , fname, %(width_mod_8), 0, %(in_remain - 1), 8
+  .else
+        @ Drop through to next iteration of the in_remain loop
+  .endif
+
+  .set in_remain, in_remain - 1
+ .endr
+.endm
+
+.macro generate_bilinear_scaled_cover_function_enlarge fname, \
+                                                       bpp_, \
+                                                       format, \
+                                                       factor, \
+                                                       prefetch_distance_, \
+                                                       convert, \
+                                                       pack, \
+                                                       init, \
+                                                       final
+
+0:      .word       0xfffeffff
+        .word       0xfffcfffd
+
+/* void fname(uint32_t       width,
+ *            pixman_fixed_t x,
+ *            pixman_fixed_t ux,
+ *            uint32_t      *dest,
+ *            const void    *source);
+ */
+pixman_asm_function fname
+
+/*
+ * Make some macro arguments globally visible and accessible
+ * from other macros
+ */
+ .set bpp, \bpp_
+ .set prefetch_distance, \prefetch_distance_
+
+/*
+ * Assign symbolic names to registers
+ */
+COUNT   .req    a1
+ACCUM   .req    a2
+UX      .req    a3
+DST     .req    a4
+SRC     .req    v1
+D4321   .req    d0  @ needs to be in range d0-d7 for vmla.s16
+@ second half of d1 and d2-d5 contain 9x32bpp source pixel circular buffer
+DDIST   .req    d6  @ needs to be in range d0-d7 for vmla.s16
+DACCUM  .req    d7
+DUX     .req    d8
+
+        push        {v1,lr}
+        vpush       {d8}
+
+        ldr         SRC, [sp, #8 + 2*4]
+        add         SRC, SRC, ACCUM, lsr #16 - (log2_\bpp_ - 3)
+ .if bpp > 8
+        bic         SRC, SRC, #(bpp - 1) / 8
+ .endif
+ .set off, 0
+ .rept prefetch_distance + 1
+        pld         [SRC, #off * 64]
+  .set off, off + 1
+ .endr
+
+        init
+
+        @ Each destination pixel is interpolated from two source pixels, even if
+        @ the weight for one of them is zero (due to the fractional part of the
+        @ position being 0 within the precision of interpolation). The use of a
+        @ negative accumulator means that the source pixel with weight 0 is the
+        @ one to the left.
+        @ When the leftmost destination pixel is one of this type, we take
+        @ special measures to ensure we don't load the leftmost source pixel to
+        @ ensure we can't stray beyond array bounds. We need to calculate the
+        @ total number of source pixels required, both including and excluding
+        @ any such leftmost pixel.
+        sub         COUNT, COUNT, #1
+        sub         lr, ACCUM, #1 << (16 - BILINEAR_INTERPOLATION_BITS)
+        mla         ip, COUNT, UX, lr
+        mov         lr, lr, lsr #16
+        rsb         lr, lr, ip, lsr #16  @ = number of source pixels (incl) - 2
+        mov         ip, #(1 << (32 - BILINEAR_INTERPOLATION_BITS)) - 1
+        subs        ACCUM, ip, ACCUM, lsl #16
+        @ Now carry is set if we need to load one fewer pixels
+        add         ip, ACCUM, UX, lsl #16
+        vmov.i32    DACCUM, ip, UX
+        vldr.i64    D4321, 0b
+        vdup.i16    DUX, DACCUM[2]
+        vdup.i16    DACCUM, DACCUM[1]
+        and         lr, lr, #7
+        rsc         ip, lr, #8
+        vmla.i16    DACCUM, D4321, DUX
+
+        ldrb        ip, [pc, ip]
+        add         pc, pc, ip
+0:      .byte       9f - (0b + 4)
+        .byte       8f - (0b + 4)
+        .byte       7f - (0b + 4)
+        .byte       6f - (0b + 4)
+        .byte       5f - (0b + 4)
+        .byte       4f - (0b + 4)
+        .byte       3f - (0b + 4)
+        .byte       2f - (0b + 4)
+        .byte       1f - (0b + 4)
+        .align
+9:
+ .ifnc "\convert",""
+        scatter_load_one  16, 7*bpp, 1, SRC, !
+        \convert    2, 16
+        \pack       2
+        vmov        d1, d5
+ .else
+        scatter_load_one  1, 1*bpp, 1, SRC, !
+ .endif
+        @ drop through
+8:
+ .ifnc "\convert",""
+        scatter_load_one  16, 0*bpp, 8, SRC, !
+ .else
+        scatter_load_one  2, 0*bpp, 8, SRC, !
+ .endif
+        b           10f
+7:
+ .ifnc "\convert",""
+        scatter_load_one  16, 1*bpp, 1, SRC, !
+ .else
+        scatter_load_one  2, 1*bpp, 1, SRC, !
+ .endif
+        @ drop through
+6:
+ .ifnc "\convert",""
+        scatter_load_one  16, 2*bpp, 2, SRC, !
+ .else
+        scatter_load_one  2, 2*bpp, 2, SRC, !
+ .endif
+        @ drop through
+4:
+ .ifnc "\convert",""
+        scatter_load_one  16, 4*bpp, 4, SRC, !
+ .else
+        scatter_load_one  2, 4*bpp, 4, SRC, !
+ .endif
+        b           10f
+5:
+ .ifnc "\convert",""
+        scatter_load_one  16, 3*bpp, 1, SRC, !
+        scatter_load_one  16, 4*bpp, 4, SRC, !
+ .else
+        scatter_load_one  2, 3*bpp, 1, SRC, !
+        scatter_load_one  2, 4*bpp, 4, SRC, !
+ .endif
+        b           10f
+3:
+ .ifnc "\convert",""
+        scatter_load_one  16, 5*bpp, 1, SRC, !
+ .else
+        scatter_load_one  2, 5*bpp, 1, SRC, !
+ .endif
+        @ drop through
+2:
+ .ifnc "\convert",""
+        scatter_load_one  16, 6*bpp, 2, SRC, !
+ .else
+        scatter_load_one  2, 6*bpp, 2, SRC, !
+ .endif
+        b           10f
+1:
+ .ifnc "\convert",""
+        scatter_load_one  16, 7*bpp, 1, SRC, !
+ .else
+        scatter_load_one  2, 7*bpp, 1, SRC, !
+ .endif
+        b           10f
+
+10:
+ .ifnc "\convert",""
+        \convert    2, 16
+        \pack       2
+ .endif
+        orr         lr, lr, COUNT, lsl #3
+        and         lr, lr, #0x3f
+        vshr.u16    DDIST, DACCUM, #16 - BILINEAR_INTERPOLATION_BITS
+        ldr         ip, [pc, lr, lsl #2]
+        add         pc, pc, ip
+0:
+ .set width_mod_8, 1
+ .rept 8
+  .set in_remain, 2
+  .rept 8
+   .if width_mod_8 > 0
+        bilinear_enlarge_jump_table_offset fname, %(width_mod_8), 1, %(in_remain), %(width_mod_8)
+   .else
+        bilinear_enlarge_jump_table_offset fname, %(width_mod_8), 0, %(in_remain), 8
+   .endif
+   .set in_remain, in_remain + 1
+  .endr
+  .set width_mod_8, (width_mod_8 + 1) % 8
+ .endr
+ .align
+
+ .set width_mod_8, 0
+ .rept 8
+  .if width_mod_8 != 0
+        @ First handle the leading <8 output pixels
+        bilinear_enlarge_main_loop  fname, width_mod_8, width_mod_8, 1
+  .endif
+        @ Then the remaining blocks of 8 output pixels
+        bilinear_enlarge_main_loop  fname, 8, width_mod_8, 0
+  .set width_mod_8, width_mod_8 + 1
+ .endr
+
+80:     @ Load next 8 source pixels
+        pld         [SRC, #prefetch_distance * 64]
+        vmov        d1, d5
+ .ifnc "\convert",""
+        scatter_load_one  16, 0*bpp, 8, SRC, !
+        \convert    2, 16
+        \pack       2
+ .else
+        scatter_load_one  2, 0*bpp, 8, SRC, !
+ .endif
+        bx          lr
+
+99:     @ Clean up and exit
+        final
+        vpop        {d8}
+        pop         {v1,pc}
+
+.unreq   COUNT
+.unreq   ACCUM
+.unreq   UX
+.unreq   DST
+.unreq   SRC
+.unreq   D4321
+.unreq   DACCUM
+.unreq   DUX
+.unreq   DDIST
+.endfunc
+.endm
+
 .macro generate_bilinear_scaled_cover_functions bpp, \
                                                 format, \
+                                                alternate_enlarge_method, \
                                                 pd0, pd1, pd2, pd3, pd4, pd5, pd6, pd7, \
                                                 convert, \
                                                 pack, \
                                                 init, \
                                                 final
+ .if alternate_enlarge_method
+generate_bilinear_scaled_cover_function_enlarge \
+    pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor0_asm_neon, \
+    \bpp, \format, 0, \pd0, \convert, \pack, \init, \final
+ .else
 generate_bilinear_scaled_cover_function_reduce \
     pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor0_asm_neon, \
     \bpp, \format, 0, \pd0, \convert, \pack, \init, \final
+ .endif
 generate_bilinear_scaled_cover_function_reduce \
     pixman_get_scanline_bilinear_scaled_cover_pass1_\format\()_factor1_asm_neon, \
     \bpp, \format, 1, \pd1, \convert, \pack, \init, \final
