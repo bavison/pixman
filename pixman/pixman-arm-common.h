@@ -576,6 +576,7 @@ typedef void (*pixman_arm_bilinear_pass1_t) (uint32_t       width,
 typedef struct
 {
     pixman_arm_bilinear_pass1_t pass1;
+    pixman_arm_bilinear_pass1_t pass1_pad;
     int                         line_y[2];
     int16_t                    *line_buffer;
     pixman_fixed_t              x;
@@ -863,11 +864,92 @@ bilinear_none_repeat_get_scanline_bounds2 (int32_t         source_image_width,
     *left_none = n0;
 }
 
+/* For source images with bilinear interpolation and PAD repeat, calculate:
+ * - number of pixels padded at edge
+ * - number of pixels remaining which are wholly fetched from the source image
+ *
+ * This differs from bilinear_pad_repeat_get_scanline_bounds() in pixman-inlines.h thus:
+ * - doesn't bother calculating two boundaries which are irrelevant to PAD
+ * - rounds of integer position differently at each threshold, to disfavour
+ *   pad zones (hopefully setting them to 0 in some cases)
+ * - tries to avoid using 64-bit intermediates
+ * - handles negative 'ux' values (because it's not that hard)
+ */
+static force_inline void
+bilinear_pad_repeat_get_scanline_bounds2 (int32_t         source_image_width,
+                                          pixman_fixed_t  vx,
+                                          pixman_fixed_t  ux,
+                                          int32_t        *left,
+                                          int32_t        *centre,
+                                          int32_t        *right)
+{
+    int32_t r, n0, n1;
+
+    /* Really try to avoid doing lots of 64-bit divisions if we can avoid them.
+     * They should almost never occur in real world situations!
+     */
+    if (vx < -INT32_MAX + pixman_int_to_fixed (source_image_width) - pixman_fixed_1)
+    {
+        int64_t d;
+
+        /* See 32-bit case below for comments */
+        d = - (int64_t) vx;
+        n0 = d / ux;
+        r = d % ux;
+        if (r != 0 && ((r < 0) == (ux < 0)))
+            ++n0;
+
+        d = pixman_int_to_fixed (source_image_width) - pixman_fixed_1 - (int64_t) vx;
+        n1 = d / ux;
+        r = d % ux;
+        if (r == 0 || ((r < 0) == (ux < 0)))
+            ++n1;
+    }
+    else
+    {
+        int32_t d;
+
+        /* Boundary between left pad and centre zones:
+         *   (vx + n * ux) < 0
+         *   n < (-vx) / ux
+         * round up
+         */
+        d = - vx;
+        n0 = d / ux;
+        r = d % ux;
+        if (r != 0 && ((r < 0) == (ux < 0)))
+            ++n0;
+
+        /* Boundary between centre and right pad zones:
+         *   (vx + n * ux) > width - 1
+         *   n > (width - 1 - vx) / ux
+         * round down, then increment n so it can be tested using < / >=
+         */
+        d = pixman_int_to_fixed (source_image_width) - pixman_fixed_1 - vx;
+        n1 = d / ux;
+        r = d % ux;
+        if (r == 0 || ((r < 0) == (ux < 0)))
+            ++n1;
+    }
+
+    /* Now bind these boundaries within the destination image */
+    n0 = MAX (n0, 0);
+    n1 = MAX (n1, 0);
+    n0 = MIN (n0, *centre);
+    n1 = MIN (n1, *centre);
+
+    /* Calculate zone widths */
+    *right = *centre - n1;
+    *centre = n1 - n0;
+    *left = n0;
+}
+
 static force_inline void
 get_scanline_bilinear_scaled_pass1_wrapper (
         pixman_repeat_t               repeat_mode,
         size_t                        granule,
         pixman_arm_bilinear_pass1_t   pass1,
+        pixman_arm_bilinear_pass1_t   pass1_pad,
         void                        (*convert_adjacent) (const void *, int, uint32_t *, uint32_t *, uint32_t *, uint32_t *),
         void                        (*store_part_interpolated) (int16_t *, uint32_t, uint32_t),
         int32_t                       left_none,
@@ -933,6 +1015,23 @@ get_scanline_bilinear_scaled_pass1_wrapper (
             }
         }
     }
+    else if (repeat_mode == PIXMAN_REPEAT_PAD)
+    {
+        if (left > 0)
+        {
+            pass1_pad (left, 0, 0, dest, source);
+            dest += ROUNDUP (left, granule) * 4 * 2;
+        }
+        if (centre > 0)
+        {
+            pass1 (centre, x, ux, dest, source);
+            dest += ROUNDUP (centre, granule) * 4 * 2;
+        }
+        if (right > 0)
+        {
+            pass1_pad (right, pixman_int_to_fixed (source_width - 1), 0, dest, source);
+        }
+    }
 }
 
 static force_inline void
@@ -953,7 +1052,7 @@ get_scanline_bilinear_scaled_pass2_wrapper (
     {
         pass2 (centre, out, buffer, dist_y);
     }
-    else if (repeat_mode == PIXMAN_REPEAT_NONE)
+    else if (repeat_mode == PIXMAN_REPEAT_NONE || repeat_mode == PIXMAN_REPEAT_PAD)
     {
         if (left_none > 0)
         {
@@ -1014,6 +1113,13 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name##_init (          
                                       &left_none, &left, &centre, &right, &right_none);     \
         x += left_none * uxx;                                                               \
     }                                                                                       \
+    else if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_PAD)                            \
+    {                                                                                       \
+        bilinear_pad_repeat_get_scanline_bounds2 (                                          \
+                                      iter->image->bits.width, x, uxx,                      \
+                                      &left, &centre, &right);                              \
+        x += left * uxx;                                                                    \
+    }                                                                                       \
                                                                                             \
     line_buffer_size = 2 *                                                                  \
         (ROUNDUP (left,   PIXMAN_ARM_BILINEAR_GRANULE) +                                    \
@@ -1050,6 +1156,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name##_init (          
         if (uxx >= 8)                                                                       \
             uxx = 8;                                                                        \
         info->pass1 = routines[uxx];                                                        \
+        info->pass1_pad = routines[0];                                                      \
                                                                                             \
         /* It is safe to set the y coordinates to -1 initially                              \
          * because COVER_CLIP_BILINEAR ensures that we will only                            \
@@ -1092,6 +1199,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
     type                       *bits       = (type *)iter->image->bits.bits;                \
     int                         stride     = info->stride;                                  \
     uint32_t                   *out        = iter->buffer;                                  \
+    pixman_bool_t               valign     = FALSE;                                         \
     int32_t                     dist_y;                                                     \
     unsigned                    frac_bits;                                                  \
                                                                                             \
@@ -1124,9 +1232,25 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
                 info->line_y[y1 & 1] = iter->image->bits.height;                            \
         }                                                                                   \
     }                                                                                       \
+    else if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_PAD)                            \
+    {                                                                                       \
+        if (y1 <= 0)                                                                        \
+        {                                                                                   \
+            valign = TRUE;                                                                  \
+            y0 = 0;                                                                         \
+        }                                                                                   \
+        else if (y1 >= iter->image->bits.height)                                            \
+        {                                                                                   \
+            valign = TRUE;                                                                  \
+            y0 = iter->image->bits.height - 1;                                              \
+        }                                                                                   \
+    }                                                                                       \
                                                                                             \
     frac_bits = BILINEAR_INTERPOLATION_BITS + PIXMAN_ARM_BILINEAR_PADDING_BITS;             \
-    dist_y = (info->y >> (16 - frac_bits)) &                                                \
+    if (valign)                                                                             \
+        dist_y = 0;                                                                         \
+    else                                                                                    \
+        dist_y = (info->y >> (16 - frac_bits)) &                                            \
                   ((1 << frac_bits) - (1 << PIXMAN_ARM_BILINEAR_PADDING_BITS));             \
     info->y += iter->image->common.transform->matrix[1][1];                                 \
                                                                                             \
@@ -1142,6 +1266,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
         get_scanline_bilinear_scaled_pass1_wrapper (PIXMAN_REPEAT_ ## repeat_mode,          \
                                              PIXMAN_ARM_BILINEAR_GRANULE,                   \
                                              info->pass1,                                   \
+                                             info->pass1_pad,                               \
                                              cputype##_convert_adjacent_##name,             \
                                              cputype##_store_part_interpolated,             \
                                              left_none, left, centre, right, right_none,    \
@@ -1158,6 +1283,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
             get_scanline_bilinear_scaled_pass1_wrapper (PIXMAN_REPEAT_ ## repeat_mode,      \
                                              PIXMAN_ARM_BILINEAR_GRANULE,                   \
                                              info->pass1,                                   \
+                                             info->pass1_pad,                               \
                                              cputype##_convert_adjacent_##name,             \
                                              cputype##_store_part_interpolated,             \
                                              left_none, left, centre, right, right_none,    \
@@ -1189,6 +1315,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED_COMMON(cputype, name, type)                \
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, COVER)                \
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, NONE)                 \
+    PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, PAD)                  \
 
 #define PIXMAN_ARM_BILINEAR_SCALED_COVER_FETCHER(cputype, format)               \
     { PIXMAN_ ## format,                                                        \
@@ -1213,7 +1340,8 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
 
 #define PIXMAN_ARM_BILINEAR_SCALED_FETCHER(cputype, format)                     \
      PIXMAN_ARM_BILINEAR_SCALED_COVER_FETCHER (cputype, format),                \
-     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, NONE)
+     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, NONE),         \
+     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, PAD)
 
 /*****************************************************************************/
 
