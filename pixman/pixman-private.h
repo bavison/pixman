@@ -891,12 +891,12 @@ pixman_list_move_to_front (pixman_list_t *list, pixman_link_t *link)
 #endif
 
 /* Integer division that rounds towards -infinity */
-#define DIV(a, b)					   \
-    ((((a) < 0) == ((b) < 0)) ? (a) / (b) :                \
-     ((a) - (b) + 1 - (((b) < 0) << 1)) / (b))
+#define DIV(a, b) \
+    ((a) / (b) - ((a) % (b) != 0 && ((a) % (b) < 0) != ((b) < 0) ? 1 : 0))
 
 /* Modulus that produces the remainder wrt. DIV */
-#define MOD(a, b) ((a) < 0 ? ((b) - ((-(a) - 1) % (b))) - 1 : (a) % (b))
+#define MOD(a, b) \
+    ((a) % (b) + ((a) % (b) != 0 && ((a) % (b) < 0) != ((b) < 0) ? (b) : 0))
 
 #define CLIP(v, low, high) ((v) < (low) ? (low) : ((v) > (high) ? (high) : (v)))
 
