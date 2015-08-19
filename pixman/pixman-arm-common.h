@@ -1039,12 +1039,47 @@ get_scanline_bilinear_scaled_pass1_wrapper (
             pass1_pad (right, pixman_int_to_fixed (source_width - 1), 0, dest, source);
         }
     }
-    else if (repeat_mode == PIXMAN_REPEAT_NORMAL)
+    else if (repeat_mode == PIXMAN_REPEAT_NORMAL ||
+             repeat_mode == PIXMAN_REPEAT_REFLECT)
     {
         if (use_copy)
         {
             for (n = 0; n < copy_width / source_width; n++)
-                memcpy (copy + n * source_width * source_size, source, source_width * source_size);
+            {
+                if (repeat_mode == PIXMAN_REPEAT_NORMAL || (n & 1) == 0)
+                {
+                    memcpy (copy + n * source_width * source_size, source, source_width * source_size);
+                }
+                else
+                {
+                    /* We could probably do a better job of this - but at least
+                     * the preceding memcpy will mean that the source bitmap is
+                     * in the L1 cache.
+                     */
+                    int w = source_width;
+                    if (source_size == 1)
+                    {
+                        const int8_t *s = (int8_t *) source + source_width - 1;
+                        int8_t       *d = (int8_t *) copy + n * source_width;
+                        while (w-- > 0)
+                            *d++ = *s--;
+                    }
+                    else if (source_size == 2)
+                    {
+                        const int16_t *s = (int16_t *) source + source_width - 1;
+                        int16_t       *d = (int16_t *) copy + n * source_width;
+                        while (w-- > 0)
+                            *d++ = *s--;
+                    }
+                    else if (source_size == 4)
+                    {
+                        const int32_t *s = (int32_t *) source + source_width - 1;
+                        int32_t       *d = (int32_t *) copy + n * source_width;
+                        while (w-- > 0)
+                            *d++ = *s--;
+                    }
+                }
+            }
             memcpy (copy + n * source_width * source_size, source, source_size);
             source = copy;
         }
@@ -1120,7 +1155,8 @@ get_scanline_bilinear_scaled_pass2_wrapper (
             memset (out, 0, right_none * 4);
         }
     }
-    else if (repeat_mode == PIXMAN_REPEAT_NORMAL)
+    else if (repeat_mode == PIXMAN_REPEAT_NORMAL ||
+             repeat_mode == PIXMAN_REPEAT_REFLECT)
     {
         int n;
 
@@ -1183,12 +1219,16 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name##_init (          
                                       &left, &centre, &right);                              \
         x += left * uxx;                                                                    \
     }                                                                                       \
-    else if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_NORMAL)                         \
+    else if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_NORMAL ||                       \
+             PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_REFLECT)                        \
     {                                                                                       \
         uint64_t max_x_64;                                                                  \
         int max_x;                                                                          \
+        int width2 = iter->image->bits.width;                                               \
                                                                                             \
-        x = MOD (x, pixman_int_to_fixed (iter->image->bits.width));                         \
+        if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_REFLECT)                         \
+            width2 *= 2;                                                                    \
+        x = MOD (x, pixman_int_to_fixed (width2));                                          \
         max_x_64 = x + (iter->width - 1) * (uint64_t) uxx + pixman_fixed_1 - 1;             \
         max_x_64 = pixman_fixed_to_int (max_x_64);                                          \
         max_x = MIN (max_x_64, INT32_MAX);                                                  \
@@ -1200,7 +1240,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name##_init (          
             int            n;                                                               \
                                                                                             \
             for (copy_width = 0; copy_width < MIN (REPEAT_NORMAL_MIN_WIDTH, max_x); )       \
-                copy_width += iter->image->bits.width;                                      \
+                copy_width += width2;                                                       \
             use_copy = TRUE;                                                                \
                                                                                             \
             /* Here we use "right" to hold the excess space needed due to rounding */       \
@@ -1279,6 +1319,8 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name##_init (          
         info->y = y;                                                                        \
         if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_NORMAL)                          \
             info->y = MOD (info->y, pixman_int_to_fixed (iter->image->bits.height));        \
+        if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_REFLECT)                         \
+            info->y = MOD (info->y, pixman_int_to_fixed (iter->image->bits.height * 2));    \
         info->stride = stride;                                                              \
         info->left_none = left_none;                                                        \
         info->left = left;                                                                  \
@@ -1371,6 +1413,23 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
         if (y1 == iter->image->bits.height)                                                 \
             y1 = 0;                                                                         \
     }                                                                                       \
+    else if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_REFLECT)                        \
+    {                                                                                       \
+        while (info->y >= pixman_int_to_fixed (iter->image->bits.height * 2))               \
+            info->y -= pixman_int_to_fixed (iter->image->bits.height * 2);                  \
+        while (info->y < 0)                                                                 \
+            info->y += pixman_int_to_fixed (iter->image->bits.height) * 2;                  \
+        y0 = pixman_fixed_to_int (info->y);                                                 \
+        y1 = y0 + 1;                                                                        \
+        if (y1 == iter->image->bits.height ||                                               \
+            y1 == iter->image->bits.height * 2)                                             \
+            valign = TRUE;                                                                  \
+        if (y1 > iter->image->bits.height)                                                  \
+        {                                                                                   \
+            y0 = iter->image->bits.height * 2 - y1;                                         \
+            y1 = y0 - 1;                                                                    \
+        }                                                                                   \
+    }                                                                                       \
                                                                                             \
     frac_bits = BILINEAR_INTERPOLATION_BITS + PIXMAN_ARM_BILINEAR_PADDING_BITS;             \
     if (valign)                                                                             \
@@ -1449,6 +1508,7 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, NONE)                 \
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, PAD)                  \
     PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, NORMAL)               \
+    PIXMAN_ARM_BIND_GET_SCANLINE_BILINEAR_SCALED(cputype, name, type, REFLECT)              \
 
 #define PIXMAN_ARM_BILINEAR_SCALED_COVER_FETCHER(cputype, format)               \
     { PIXMAN_ ## format,                                                        \
@@ -1475,7 +1535,8 @@ cputype##_get_scanline_bilinear_scaled_##repeat_mode##_##name (pixman_iter_t  *i
      PIXMAN_ARM_BILINEAR_SCALED_COVER_FETCHER (cputype, format),                \
      PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, NONE),         \
      PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, PAD),          \
-     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, NORMAL)
+     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, NORMAL),       \
+     PIXMAN_ARM_BILINEAR_SCALED_REPEAT_FETCHER (cputype, format, REFLECT)
 
 /*****************************************************************************/
 
