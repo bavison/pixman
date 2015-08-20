@@ -168,6 +168,15 @@ PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, AD
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, r5g6b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, a1r5g5b5)
 
+PIXMAN_ARM_BIND_WRITE_BACK   (neon, r5g6b5)
+
+static uint32_t *
+fast_dest_fetch_noop (pixman_iter_t *iter, const uint32_t *mask)
+{
+    iter->bits += iter->stride;
+    return iter->buffer;
+}
+
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
                                    int32_t   h,
@@ -444,6 +453,7 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
 static const pixman_iter_info_t arm_neon_iters[] =
 {
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, r5g6b5),
+    PIXMAN_ARM_WRITEBACK (neon, r5g6b5),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, a1r5g5b5),
 

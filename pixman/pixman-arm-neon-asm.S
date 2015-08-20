@@ -461,6 +461,16 @@ generate_composite_function \
     pixman_composite_src_8888_0565_process_pixblock_tail, \
     pixman_composite_src_8888_0565_process_pixblock_tail_head
 
+generate_composite_function_single_scanline \
+    pixman_write_back_r5g6b5_asm_neon, 32, 0, 16, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_src_8888_0565_process_pixblock_head, \
+    pixman_composite_src_8888_0565_process_pixblock_tail, \
+    pixman_composite_src_8888_0565_process_pixblock_tail_head
+
 /******************************************************************************/
 
 .macro pixman_composite_src_0565_8888_process_pixblock_head
