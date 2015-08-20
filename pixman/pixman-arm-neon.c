@@ -143,32 +143,6 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_0565,
 PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_A8_DST (SKIP_ZERO_SRC, neon, 0565_8_0565,
                                            OVER, uint16_t, uint16_t)
 
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 8888_8888, SRC,
-                                         uint32_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 8888_0565, SRC,
-                                         uint32_t, uint16_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 0565_x888, SRC,
-                                         uint16_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 0565_0565, SRC,
-                                         uint16_t, uint16_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (SKIP_ZERO_SRC, neon, 8888_8888, OVER,
-                                         uint32_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (SKIP_ZERO_SRC, neon, 8888_8888, ADD,
-                                         uint32_t, uint32_t)
-
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (0, neon, 8888_8_8888, SRC,
-                                            uint32_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (0, neon, 8888_8_0565, SRC,
-                                            uint32_t, uint16_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (0, neon, 0565_8_x888, SRC,
-                                            uint16_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (0, neon, 0565_8_0565, SRC,
-                                            uint16_t, uint16_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, OVER,
-                                            uint32_t, uint32_t)
-PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, ADD,
-                                            uint32_t, uint32_t)
-
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, r5g6b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, a1r5g5b5)
 
@@ -490,40 +464,6 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
 
     PIXMAN_ARM_SIMPLE_NEAREST_A8_MASK_FAST_PATH (OVER, r5g6b5, r5g6b5, neon_0565_8_0565),
     PIXMAN_ARM_SIMPLE_NEAREST_A8_MASK_FAST_PATH (OVER, b5g6r5, b5g6r5, neon_0565_8_0565),
-
-    SIMPLE_BILINEAR_FAST_PATH (SRC, a8r8g8b8, a8r8g8b8, neon_8888_8888),
-    SIMPLE_BILINEAR_FAST_PATH (SRC, a8r8g8b8, x8r8g8b8, neon_8888_8888),
-    SIMPLE_BILINEAR_FAST_PATH (SRC, x8r8g8b8, x8r8g8b8, neon_8888_8888),
-
-    SIMPLE_BILINEAR_FAST_PATH (SRC, a8r8g8b8, r5g6b5, neon_8888_0565),
-    SIMPLE_BILINEAR_FAST_PATH (SRC, x8r8g8b8, r5g6b5, neon_8888_0565),
-
-    SIMPLE_BILINEAR_FAST_PATH (SRC, r5g6b5, x8r8g8b8, neon_0565_x888),
-    SIMPLE_BILINEAR_FAST_PATH (SRC, r5g6b5, r5g6b5, neon_0565_0565),
-
-    SIMPLE_BILINEAR_FAST_PATH (OVER, a8r8g8b8, a8r8g8b8, neon_8888_8888),
-    SIMPLE_BILINEAR_FAST_PATH (OVER, a8r8g8b8, x8r8g8b8, neon_8888_8888),
-
-    SIMPLE_BILINEAR_FAST_PATH (ADD, a8r8g8b8, a8r8g8b8, neon_8888_8888),
-    SIMPLE_BILINEAR_FAST_PATH (ADD, a8r8g8b8, x8r8g8b8, neon_8888_8888),
-    SIMPLE_BILINEAR_FAST_PATH (ADD, x8r8g8b8, x8r8g8b8, neon_8888_8888),
-
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, a8r8g8b8, a8r8g8b8, neon_8888_8_8888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, a8r8g8b8, x8r8g8b8, neon_8888_8_8888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, x8r8g8b8, x8r8g8b8, neon_8888_8_8888),
-
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, a8r8g8b8, r5g6b5, neon_8888_8_0565),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, x8r8g8b8, r5g6b5, neon_8888_8_0565),
-
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, r5g6b5, x8r8g8b8, neon_0565_8_x888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (SRC, r5g6b5, r5g6b5, neon_0565_8_0565),
-
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (OVER, a8r8g8b8, a8r8g8b8, neon_8888_8_8888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (OVER, a8r8g8b8, x8r8g8b8, neon_8888_8_8888),
-
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, a8r8g8b8, a8r8g8b8, neon_8888_8_8888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, a8r8g8b8, x8r8g8b8, neon_8888_8_8888),
-    SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, x8r8g8b8, x8r8g8b8, neon_8888_8_8888),
 
     { PIXMAN_OP_NONE },
 };
