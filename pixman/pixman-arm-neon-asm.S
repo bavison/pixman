@@ -1343,6 +1343,50 @@ generate_composite_function \
 
 /******************************************************************************/
 
+    /* Deinterleaved data for source is in d0-d3 and mask in d24-d27 */
+    /* Result is required in d28-d31 (also deinterleaved) */
+.macro pixman_composite_src_8888_8888_8888_process_pixblock_head
+.endm
+
+.macro pixman_composite_src_8888_8888_8888_process_pixblock_tail
+    vmull.u8    q8, d27, d0
+    vmull.u8    q9, d27, d1
+    vmull.u8    q10, d27, d2
+    vmull.u8    q11, d27, d3
+    vrsra.u16   q8, q8, #8
+    vrsra.u16   q9, q9, #8
+    vrsra.u16   q10, q10, #8
+    vrsra.u16   q11, q11, #8
+    vrshrn.u16  d28, q8, #8
+    vrshrn.u16  d29, q9, #8
+    vrshrn.u16  d30, q10, #8
+    vrshrn.u16  d31, q11, #8
+.endm
+
+.macro pixman_composite_src_8888_8888_8888_process_pixblock_tail_head
+    pixman_composite_src_8888_8888_8888_process_pixblock_tail
+        fetch_src_pixblock      //  vld4.8      {d0-d3}, [SRC]!
+    vzip.8      d28, d30
+    vzip.8      d29, d31
+        fetch_mask_pixblock     //  vld4.8      {d24-d27}, [MASK]!
+        cache_preload 8, 8
+    vzip.8      d28, d29
+    vzip.8      d30, d31
+    vst1.8      {d28-d31}, [DST_W :128]!
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_src_mask_asm_neon, 32, 32, 32, \
+    FLAG_DST_WRITEONLY | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_src_8888_8888_8888_process_pixblock_head, \
+    pixman_composite_src_8888_8888_8888_process_pixblock_tail, \
+    pixman_composite_src_8888_8888_8888_process_pixblock_tail_head
+
+/******************************************************************************/
+
 .macro pixman_composite_over_n_8_8888_process_pixblock_head
     /* expecting deinterleaved source data in {d8, d9, d10, d11} */
     /* d8 - blue, d9 - green, d10 - red, d11 - alpha */
