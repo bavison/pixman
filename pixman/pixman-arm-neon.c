@@ -424,6 +424,26 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
     { PIXMAN_OP_NONE },
 };
 
+void
+pixman_composite_scanline_src_mask_asm_neon (int32_t         w,
+                                             uint32_t       *dst,
+                                             const uint32_t *src,
+                                             const uint32_t *mask);
+
+static void
+neon_combine_src_u (pixman_implementation_t *imp,
+                    pixman_op_t              op,
+                    uint32_t *               dest,
+                    const uint32_t *         src,
+                    const uint32_t *         mask,
+                    int                      width)
+{
+    if (mask)
+        pixman_composite_scanline_src_mask_asm_neon (width, dest, src, mask);
+    else
+        memcpy (dest, src, width * sizeof (uint32_t));
+}
+
 PIXMAN_ARM_BIND_COMBINE_U (neon, over)
 PIXMAN_ARM_BIND_COMBINE_U (neon, add)
 PIXMAN_ARM_BIND_COMBINE_U (neon, out_reverse)
@@ -434,6 +454,7 @@ _pixman_implementation_create_arm_neon (pixman_implementation_t *fallback)
     pixman_implementation_t *imp =
 	_pixman_implementation_create (fallback, arm_neon_fast_paths);
 
+    imp->combine_32[PIXMAN_OP_SRC] = neon_combine_src_u;
     imp->combine_32[PIXMAN_OP_OVER] = neon_combine_over_u;
     imp->combine_32[PIXMAN_OP_ADD] = neon_combine_add_u;
     imp->combine_32[PIXMAN_OP_OUT_REVERSE] = neon_combine_out_reverse_u;
