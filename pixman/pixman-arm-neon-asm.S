@@ -2205,12 +2205,49 @@ generate_composite_function_single_scanline \
 
 /******************************************************************************/
 
+.macro pixman_composite_over_reverse_8888_n_8888_process_pixblock_head
+    /* expecting source data in {d0, d1, d2, d3} */
+    /* destination data in {d4, d5, d6, d7} */
+    /* solid mask is in d15 */
+
+    /* 'in' */
+    vmull.u8    q8, d15, d3
+    vmull.u8    q6, d15, d2
+    vmull.u8    q5, d15, d1
+    vmull.u8    q4, d15, d0
+    vrshr.u16   q13, q8, #8
+    vrshr.u16   q12, q6, #8
+    vrshr.u16   q11, q5, #8
+    vrshr.u16   q10, q4, #8
+    vraddhn.u16 d3, q8, q13
+    vraddhn.u16 d2, q6, q12
+    vraddhn.u16 d1, q5, q11
+    vraddhn.u16 d0, q4, q10
+    vmvn.8      d24, d3  /* get inverted alpha */
+    /* now do alpha blending */
+    vmull.u8    q8, d24, d4
+    vmull.u8    q9, d24, d5
+    vmull.u8    q10, d24, d6
+    vmull.u8    q11, d24, d7
+.endm
+
+.macro pixman_composite_over_reverse_8888_n_8888_process_pixblock_tail
+    vrshr.u16   q14, q8, #8
+    vrshr.u16   q15, q9, #8
+    vrshr.u16   q12, q10, #8
+    vrshr.u16   q13, q11, #8
+    vraddhn.u16 d28, q14, q8
+    vraddhn.u16 d29, q15, q9
+    vraddhn.u16 d30, q12, q10
+    vraddhn.u16 d31, q13, q11
+.endm
+
 .macro pixman_composite_over_8888_n_8888_process_pixblock_head
-    pixman_composite_out_reverse_8888_n_8888_process_pixblock_head
+    pixman_composite_over_reverse_8888_n_8888_process_pixblock_head
 .endm
 
 .macro pixman_composite_over_8888_n_8888_process_pixblock_tail
-    pixman_composite_out_reverse_8888_n_8888_process_pixblock_tail
+    pixman_composite_over_reverse_8888_n_8888_process_pixblock_tail
     vqadd.u8    q14, q0, q14
     vqadd.u8    q15, q1, q15
 .endm
