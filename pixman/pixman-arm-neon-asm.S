@@ -643,11 +643,23 @@ generate_composite_function_single_scanline \
 /******************************************************************************/
 
 .macro pixman_composite_over_8888_8888_process_pixblock_head
-    pixman_composite_out_reverse_8888_8888_process_pixblock_head
+    vmvn.8      d24, d3  /* get inverted alpha */
+    /* do alpha blending */
+    vmull.u8    q8, d24, d4
+    vmull.u8    q9, d24, d5
+    vmull.u8    q10, d24, d6
+    vmull.u8    q11, d24, d7
 .endm
 
 .macro pixman_composite_over_8888_8888_process_pixblock_tail
-    pixman_composite_out_reverse_8888_8888_process_pixblock_tail
+    vrshr.u16   q14, q8, #8
+    vrshr.u16   q15, q9, #8
+    vrshr.u16   q12, q10, #8
+    vrshr.u16   q13, q11, #8
+    vraddhn.u16 d28, q14, q8
+    vraddhn.u16 d29, q15, q9
+    vraddhn.u16 d30, q12, q10
+    vraddhn.u16 d31, q13, q11
     vqadd.u8    q14, q0, q14
     vqadd.u8    q15, q1, q15
 .endm
