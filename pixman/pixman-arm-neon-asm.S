@@ -812,6 +812,75 @@ generate_composite_function_single_scanline \
 
 /******************************************************************************/
 
+.macro pixman_composite_over_reverse_8888_8888_init
+    push        {v1-v2}
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_cleanup
+    pop         {v1-v2}
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_common
+    vmull.u8    q8, d0, d24
+    vmull.u8    q9, d1, d24
+    vmull.u8    q10, d2, d24
+    vmull.u8    q11, d3, d24
+    vrshr.u16   q12, q8, #8
+    vrshr.u16   q13, q9, #8
+    vrshr.u16   q14, q10, #8
+    vrshr.u16   q15, q11, #8
+    vraddhn.u16 d0, q8, q12
+    vraddhn.u16 d1, q9, q13
+    vraddhn.u16 d2, q10, q14
+    vraddhn.u16 d3, q11, q15
+    vqadd.u8    q2, q0, q2
+    vqadd.u8    q3, q1, q3
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_process_pixblock_head
+    vmov        v1, v2, d7
+    vmvn.8      d24, d7
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    beq         20f
+    pixman_composite_over_reverse_8888_8888_common
+20:
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_process_pixblock_tail
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_process_pixblock_tail_head
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    beq         10f
+    vst4.8      {d4-d7}, [DST_W :128]
+10: add         DST_W, DST_W, #4*8
+    pixld_a 8, 32, dst_r_basereg - 4, DST_R //  vld4.8      {d4-d7}, [DST_R :128]!
+    vmov        v1, v2, d7
+    vmvn.8      d24, d7
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    addeq       SRC, SRC, #4*8
+    beq         20f
+    fetch_src_pixblock                      //  vld4.8      {d0-d3}, [SRC]!
+    pixman_composite_over_reverse_8888_8888_common
+20:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_reverse_asm_neon, 32, 0, 32, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    pixman_composite_over_reverse_8888_8888_init, \
+    pixman_composite_over_reverse_8888_8888_cleanup, \
+    pixman_composite_over_reverse_8888_8888_process_pixblock_head, \
+    pixman_composite_over_reverse_8888_8888_process_pixblock_tail, \
+    pixman_composite_over_reverse_8888_8888_process_pixblock_tail_head, \
+    4 /* dst_w_basereg */ \
+
+/******************************************************************************/
+
 .macro pixman_composite_over_n_8888_process_pixblock_head
     /* deinterleaved source pixels in {d0, d1, d2, d3} */
     /* inverted alpha in {d24} */
@@ -2394,6 +2463,82 @@ generate_composite_function \
     4,  /* dst_r_basereg */ \
     0,  /* src_basereg   */ \
     15  /* mask_basereg  */
+
+/******************************************************************************/
+
+.macro pixman_composite_over_reverse_8888_8888_8888_common
+    vmull.u8    q8, d0, d27
+    vmull.u8    q9, d1, d27
+    vmull.u8    q10, d2, d27
+    vmull.u8    q11, d3, d27
+    vrshr.u16   q12, q8, #8
+    vrshr.u16   q13, q9, #8
+    vrshr.u16   q14, q10, #8
+    vrshr.u16   q15, q11, #8
+    vraddhn.u16 d0, q8, q12
+    vmvn.8      d24, d7
+    vraddhn.u16 d1, q9, q13
+    vraddhn.u16 d2, q10, q14
+    vraddhn.u16 d3, q11, q15
+    vmull.u8    q8, d0, d24
+    vmull.u8    q9, d1, d24
+    vmull.u8    q10, d2, d24
+    vmull.u8    q11, d3, d24
+    vrshr.u16   q12, q8, #8
+    vrshr.u16   q13, q9, #8
+    vrshr.u16   q14, q10, #8
+    vrshr.u16   q15, q11, #8
+    vraddhn.u16 d0, q8, q12
+    vraddhn.u16 d1, q9, q13
+    vraddhn.u16 d2, q10, q14
+    vraddhn.u16 d3, q11, q15
+    vqadd.u8    q2, q0, q2
+    vqadd.u8    q3, q1, q3
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_8888_process_pixblock_head
+    vmov        v1, v2, d7
+    vmvn.8      d24, d7
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    beq         20f
+    pixman_composite_over_reverse_8888_8888_8888_common
+20:
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_8888_process_pixblock_tail
+.endm
+
+.macro pixman_composite_over_reverse_8888_8888_8888_process_pixblock_tail_head
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    beq         10f
+    vst4.8      {d4-d7}, [DST_W :128]
+10: add         DST_W, DST_W, #4*8
+    pixld_a 8, 32, dst_r_basereg - 4, DST_R //  vld4.8      {d4-d7}, [DST_R :128]!
+    vmov        v1, v2, d7
+    vmvn.8      d24, d7
+    cmp         v1, #-1
+    cmpeq       v2, #-1
+    addeq       SRC, SRC, #4*8
+    addeq       MASK, MASK, #4*8
+    beq         20f
+    fetch_src_pixblock                      //  vld4.8      {d0-d3}, [SRC]!
+    fetch_mask_pixblock                     //  vld4.8      {d24-27}, [MASK]!
+    pixman_composite_over_reverse_8888_8888_8888_common
+20:
+.endm
+
+generate_composite_function_single_scanline \
+    pixman_composite_scanline_over_reverse_mask_asm_neon, 32, 32, 32, \
+    FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    pixman_composite_over_reverse_8888_8888_init, \
+    pixman_composite_over_reverse_8888_8888_cleanup, \
+    pixman_composite_over_reverse_8888_8888_8888_process_pixblock_head, \
+    pixman_composite_over_reverse_8888_8888_8888_process_pixblock_tail, \
+    pixman_composite_over_reverse_8888_8888_8888_process_pixblock_tail_head, \
+    4 /* dst_w_basereg */ \
 
 /******************************************************************************/
 

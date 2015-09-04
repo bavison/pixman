@@ -479,6 +479,7 @@ neon_combine_src_u (pixman_implementation_t *imp,
 
 PIXMAN_ARM_BIND_COMBINE_U (neon, over)
 #ifdef __arm__
+PIXMAN_ARM_BIND_COMBINE_U (neon, over_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (neon, in)
 PIXMAN_ARM_BIND_COMBINE_U (neon, in_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (neon, out)
@@ -497,6 +498,7 @@ _pixman_implementation_create_arm_neon (pixman_implementation_t *fallback)
 #endif
     imp->combine_32[PIXMAN_OP_OVER] = neon_combine_over_u;
 #ifdef __arm__
+    imp->combine_32[PIXMAN_OP_OVER_REVERSE] = neon_combine_over_reverse_u;
     imp->combine_32[PIXMAN_OP_IN] = neon_combine_in_u;
     imp->combine_32[PIXMAN_OP_IN_REVERSE] = neon_combine_in_reverse_u;
     imp->combine_32[PIXMAN_OP_OUT] = neon_combine_out_u;
