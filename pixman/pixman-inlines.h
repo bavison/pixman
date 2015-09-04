@@ -924,6 +924,67 @@ fast_composite_scaled_bilinear ## scale_func_name (pixman_implementation_t *imp,
 	src_width_fixed = pixman_int_to_fixed (src_width);					\
     }												\
 												\
+    if (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_COVER)					\
+    {												\
+	/* Detect cases where a typical scanline function would read beyond array bounds. */	\
+	int32_t last_src_pixel = src_image->bits.width - 1;					\
+	max_vx = v.vector[0] + (width - 1) * unit_x;						\
+	if (pixman_fixed_to_int (max_vx) == last_src_pixel)					\
+	{											\
+	    src_type_t  buf1[2];								\
+	    src_type_t  buf2[2];								\
+	    src_type_t *src_line_top;								\
+	    src_type_t *src_line_bottom;							\
+	    width--;										\
+	    while (--height >= 0)								\
+	    {											\
+		int weight1, weight2;								\
+		dst = dst_line;									\
+		dst_line += dst_stride;								\
+		vx = v.vector[0];								\
+		if (flags & FLAG_HAVE_NON_SOLID_MASK)						\
+		{										\
+		    mask = mask_line;								\
+		    mask_line += mask_stride;							\
+		}										\
+												\
+		y1 = pixman_fixed_to_int (vy);							\
+		weight2 = pixman_fixed_to_bilinear_weight (vy);					\
+		if (weight2)									\
+		{										\
+		    /* both weight1 and weight2 are smaller than BILINEAR_INTERPOLATION_RANGE */\
+		    y2 = y1 + 1;								\
+		    weight1 = BILINEAR_INTERPOLATION_RANGE - weight2;				\
+		}										\
+		else										\
+		{										\
+		    /* set both top and bottom row to the same scanline and tweak weights */	\
+		    y2 = y1;									\
+		    weight1 = weight2 = BILINEAR_INTERPOLATION_RANGE / 2;			\
+		}										\
+		vy += unit_y;									\
+												\
+		src_line_top = src_first_line + src_stride * y1;				\
+		src_line_bottom = src_first_line + src_stride * y2;				\
+												\
+		if (width > 0)									\
+		{										\
+		    scanline_func (dst, mask, src_line_top, src_line_bottom, width,		\
+				   weight1, weight2, vx, unit_x, 0, FALSE);			\
+		}										\
+												\
+		buf1[1] = buf1[0] = src_line_top[last_src_pixel];				\
+		buf2[1] = buf2[0] = src_line_bottom[last_src_pixel];				\
+		dst += width;									\
+		if (flags & FLAG_HAVE_NON_SOLID_MASK)						\
+		    mask += width;								\
+												\
+		scanline_func (dst, mask, buf1, buf2, 1, weight1, weight2, 0, 0, 0, FALSE);	\
+	    }											\
+	    return;										\
+	}											\
+    }												\
+												\
     while (--height >= 0)									\
     {												\
 	int weight1, weight2;									\
@@ -1170,7 +1231,7 @@ fast_composite_scaled_bilinear ## scale_func_name (pixman_implementation_t *imp,
 		}										\
 	    }											\
 	}											\
-	else											\
+	else /* (PIXMAN_REPEAT_ ## repeat_mode == PIXMAN_REPEAT_COVER) */			\
 	{											\
 	    scanline_func (dst, mask, src_first_line + src_stride * y1,				\
 			   src_first_line + src_stride * y2, width,				\
@@ -1217,7 +1278,7 @@ fast_composite_scaled_bilinear ## scale_func_name (pixman_implementation_t *imp,
 #define SIMPLE_BILINEAR_FAST_PATH_COVER(op,s,d,func)			\
     {   PIXMAN_OP_ ## op,						\
 	PIXMAN_ ## s,							\
-	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_BILINEAR,	\
+	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_TIGHT_BILINEAR,	\
 	PIXMAN_null, 0,							\
 	PIXMAN_ ## d, FAST_PATH_STD_DEST_FLAGS,				\
 	fast_composite_scaled_bilinear_ ## func ## _cover ## _ ## op,	\
@@ -1259,7 +1320,7 @@ fast_composite_scaled_bilinear ## scale_func_name (pixman_implementation_t *imp,
 #define SIMPLE_BILINEAR_A8_MASK_FAST_PATH_COVER(op,s,d,func)		\
     {   PIXMAN_OP_ ## op,						\
 	PIXMAN_ ## s,							\
-	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_BILINEAR,	\
+	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_TIGHT_BILINEAR,	\
 	PIXMAN_a8, MASK_FLAGS (a8, FAST_PATH_UNIFIED_ALPHA),		\
 	PIXMAN_ ## d, FAST_PATH_STD_DEST_FLAGS,				\
 	fast_composite_scaled_bilinear_ ## func ## _cover ## _ ## op,	\
@@ -1301,7 +1362,7 @@ fast_composite_scaled_bilinear ## scale_func_name (pixman_implementation_t *imp,
 #define SIMPLE_BILINEAR_SOLID_MASK_FAST_PATH_COVER(op,s,d,func)		\
     {   PIXMAN_OP_ ## op,						\
 	PIXMAN_ ## s,							\
-	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_BILINEAR,	\
+	SCALED_BILINEAR_FLAGS | FAST_PATH_SAMPLES_COVER_CLIP_TIGHT_BILINEAR,	\
 	PIXMAN_solid, MASK_FLAGS (solid, FAST_PATH_UNIFIED_ALPHA),	\
 	PIXMAN_ ## d, FAST_PATH_STD_DEST_FLAGS,				\
 	fast_composite_scaled_bilinear_ ## func ## _cover ## _ ## op,	\
