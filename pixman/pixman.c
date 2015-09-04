@@ -514,6 +514,14 @@ analyze_extent (pixman_image_t       *image,
 	{
 	    *flags |= FAST_PATH_SAMPLES_COVER_CLIP_BILINEAR;
 	}
+
+        if (pixman_fixed_to_int (transformed.x1 - pixman_fixed_1 / 2) >= 0                                 &&
+            pixman_fixed_to_int (transformed.y1 - pixman_fixed_1 / 2) >= 0                                 &&
+            pixman_fixed_to_int (transformed.x2 + pixman_fixed_1 / 2 - pixman_fixed_e) < image->bits.width &&
+            pixman_fixed_to_int (transformed.y2 + pixman_fixed_1 / 2 - pixman_fixed_e) < image->bits.height)
+        {
+            *flags |= FAST_PATH_SAMPLES_COVER_CLIP_TIGHT_BILINEAR;
+        }
     }
 
     /* Check we don't overflow when the destination extents are expanded by one.
