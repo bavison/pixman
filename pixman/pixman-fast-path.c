@@ -2280,18 +2280,29 @@ fetch_horizontal (bits_image_t *image, line_t *line,
 		  int y, pixman_fixed_t x, pixman_fixed_t ux, int n)
 {
     uint32_t *bits = image->bits + y * image->rowstride;
-    int i;
+    int i, x0, x1;
+    int32_t dist_x;
+    uint32_t left, right;
+
+    x = (1 << (16 - BILINEAR_INTERPOLATION_BITS)) - 1 - x;
+    ux = -ux;
+
+    x0 = pixman_fixed_to_int (x);
+    x1 = x0 + 1;
+    dist_x = pixman_fixed_to_bilinear_weight (x);
+    left = dist_x ? *(bits - x1) : 0;
 
     for (i = 0; i < n; ++i)
     {
-	int x0 = pixman_fixed_to_int (x);
-	int x1 = x0 + 1;
-	int32_t dist_x;
+	if (i > 0)
+	{
+	    x0 = pixman_fixed_to_int (x);
+	    x1 = x0 + 1;
+	    dist_x = pixman_fixed_to_bilinear_weight (x);
+	    left = *(bits - x1);
+	}
 
-	uint32_t left = *(bits + x0);
-	uint32_t right = *(bits + x1);
-
-	dist_x = pixman_fixed_to_bilinear_weight (x);
+	right = *(bits - x0);
 	dist_x <<= (8 - BILINEAR_INTERPOLATION_BITS);
 
 #if SIZEOF_LONG <= 4
@@ -2301,11 +2312,11 @@ fetch_horizontal (bits_image_t *image, line_t *line,
 
 	    lag = (left & 0xff00ff00) >> 8;
 	    rag = (right & 0xff00ff00) >> 8;
-	    ag = (lag << 8) + dist_x * (rag - lag);
+	    ag = (rag << 8) + dist_x * (lag - rag);
 
 	    lrb = (left & 0x00ff00ff);
 	    rrb = (right & 0x00ff00ff);
-	    rb = (lrb << 8) + dist_x * (rrb - lrb);
+	    rb = (rrb << 8) + dist_x * (lrb - rrb);
 
 	    *((uint32_t *)(line->buffer + i)) = ag;
 	    *((uint32_t *)(line->buffer + i) + 1) = rb;
@@ -2323,7 +2334,7 @@ fetch_horizontal (bits_image_t *image, line_t *line,
 	    lagrb = (((uint64_t)lag) << 24) | lrb;
 	    ragrb = (((uint64_t)rag) << 24) | rrb;
 
-	    line->buffer[i] = (lagrb << 8) + dist_x * (ragrb - lagrb);
+	    line->buffer[i] = (ragrb << 8) + dist_x * (lagrb - ragrb);
 	}
 #endif
 
@@ -2350,6 +2361,8 @@ fast_fetch_bilinear_cover (pixman_iter_t *iter, const uint32_t *mask)
 
     y0 = pixman_fixed_to_int (info->y);
     y1 = y0 + 1;
+    if (y1 == iter->image->bits.height)
+	y1 = y0;
     dist_y = pixman_fixed_to_bilinear_weight (info->y);
     dist_y <<= (8 - BILINEAR_INTERPOLATION_BITS);
 
@@ -3187,7 +3200,7 @@ static const pixman_iter_info_t fast_iters[] =
       (FAST_PATH_STANDARD_FLAGS			|
        FAST_PATH_SCALE_TRANSFORM		|
        FAST_PATH_BILINEAR_FILTER		|
-       FAST_PATH_SAMPLES_COVER_CLIP_BILINEAR),
+       FAST_PATH_SAMPLES_COVER_CLIP_TIGHT_BILINEAR),
       ITER_NARROW | ITER_SRC,
       fast_bilinear_cover_iter_init,
       NULL, NULL
