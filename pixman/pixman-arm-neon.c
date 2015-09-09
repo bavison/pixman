@@ -169,6 +169,11 @@ PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, OV
 PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, ADD,
                                             uint32_t, uint32_t)
 
+#ifdef __arm__
+PIXMAN_ARM_BIND_GET_SCANLINE (neon, r5g6b5)
+PIXMAN_ARM_BIND_GET_SCANLINE (neon, a1r5g5b5)
+#endif
+
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
                                    int32_t   h,
@@ -468,6 +473,15 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
 };
 
 #ifdef __arm__
+static const pixman_iter_info_t arm_neon_iters[] =
+{
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, r5g6b5),
+
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, a1r5g5b5),
+
+    { PIXMAN_null },
+};
+
 void
 pixman_composite_scanline_src_mask_asm_neon (int32_t         w,
                                              uint32_t       *dst,
@@ -518,6 +532,9 @@ _pixman_implementation_create_arm_neon (pixman_implementation_t *fallback)
     imp->combine_32[PIXMAN_OP_OUT_REVERSE] = neon_combine_out_reverse_u;
     imp->combine_32[PIXMAN_OP_ADD] = neon_combine_add_u;
 
+#ifdef __arm__
+    imp->iter_info = arm_neon_iters;
+#endif
     imp->blt = arm_neon_blt;
     imp->fill = arm_neon_fill;
 
