@@ -496,6 +496,16 @@ generate_composite_function \
     pixman_composite_src_0565_8888_process_pixblock_tail, \
     pixman_composite_src_0565_8888_process_pixblock_tail_head
 
+generate_composite_function_single_scanline \
+    pixman_get_scanline_r5g6b5_asm_neon, 16, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_src_0565_8888_process_pixblock_head, \
+    pixman_composite_src_0565_8888_process_pixblock_tail, \
+    pixman_composite_src_0565_8888_process_pixblock_tail_head
+
 /******************************************************************************/
 
 .macro pixman_composite_add_8_8_process_pixblock_head
@@ -3221,6 +3231,16 @@ generate_composite_function \
     FLAG_DST_WRITEONLY, \
     8, /* number of pixels, processed in a single block */ \
     6, /* prefetch distance */ \
+    default_init, \
+    default_cleanup, \
+    pixman_composite_src_1555_8888_process_pixblock_head, \
+    pixman_composite_src_1555_8888_process_pixblock_tail, \
+    pixman_composite_src_1555_8888_process_pixblock_tail_head
+
+generate_composite_function_single_scanline \
+    pixman_get_scanline_a1r5g5b5_asm_neon, 16, 0, 32, \
+    FLAG_DST_WRITEONLY, \
+    8, /* number of pixels, processed in a single block */ \
     default_init, \
     default_cleanup, \
     pixman_composite_src_1555_8888_process_pixblock_head, \
