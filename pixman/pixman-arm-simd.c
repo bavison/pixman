@@ -98,6 +98,7 @@ PIXMAN_ARM_BIND_COMBINE_U (armv6, out)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, out_reverse)
 PIXMAN_ARM_BIND_COMBINE_U (armv6, add)
 
+PIXMAN_ARM_BIND_GET_SCANLINE (armv6, x8r8g8b8)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, r5g6b5)
 PIXMAN_ARM_BIND_WRITE_BACK   (armv6, r5g6b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (armv6, a1r5g5b5)
@@ -321,6 +322,8 @@ static const pixman_fast_path_t arm_simd_fast_paths[] =
 
 static const pixman_iter_info_t arm_simd_iters[] =
 {
+    PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, x8r8g8b8),
+
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (armv6, r5g6b5),
     PIXMAN_ARM_WRITEBACK (armv6, r5g6b5),
 

@@ -210,6 +210,16 @@ generate_composite_function \
     pixman_composite_src_x888_8888_process_head, \
     pixman_composite_src_x888_8888_process_tail
 
+generate_composite_function_single_scanline \
+    pixman_get_scanline_x8r8g8b8_asm_armv6, 32, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_COND_EXEC | FLAG_PROCESS_PRESERVES_SCRATCH, \
+    3, /* prefetch distance */ \
+    nop_macro, /* init */ \
+    nop_macro, /* newline */ \
+    nop_macro, /* cleanup */ \
+    pixman_composite_src_x888_8888_process_head, \
+    pixman_composite_src_x888_8888_process_tail
+
 /******************************************************************************/
 
 .macro src_8888_8888_8888_init
