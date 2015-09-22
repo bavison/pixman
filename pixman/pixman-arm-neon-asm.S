@@ -1186,8 +1186,7 @@ generate_composite_function \
 .endm
 
 .macro pixman_composite_src_x888_8888_init
-    vmov.u8  q2, #0xFF
-    vshl.u32 q2, q2, #24
+    vmov.u32 q2, #0xFF000000
 .endm
 
 generate_composite_function \
