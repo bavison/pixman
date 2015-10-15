@@ -3358,6 +3358,28 @@ generate_composite_function_single_scanline \
 
 /******************************************************************************/
 
+.macro pixman_composite_src_8_8888_init
+    vmov.u8     d0, #0
+    vmov.u8     d1, #0
+    vmov.u8     d2, #0
+.endm
+
+.macro pixman_composite_src_8_8888_process_pixblock_head
+    /* src is in d3 */
+.endm
+
+.macro pixman_composite_src_8_8888_process_pixblock_tail
+    /* result is in d0-d3 */
+.endm
+
+.macro pixman_composite_src_8_8888_process_pixblock_tail_head
+    pixst_a 8, 32, dst_w_basereg - 4, DST_W //  vst4.8      {d0-d3}, [DST_W :128]!
+    fetch_src_pixblock                      //  vld1.8      {d3}, [SRC]!
+    cache_preload 8, 8
+.endm
+
+/******************************************************************************/
+
 generate_composite_function_nearest_scanline \
     pixman_scaled_nearest_scanline_8888_8888_SRC_asm_neon, 32, 0, 32, \
     FLAG_DST_WRITEONLY, \
@@ -3385,6 +3407,21 @@ generate_composite_function_nearest_scanline \
     0, /* dst_r_basereg */ \
     0, /* src_basereg   */ \
     0  /* mask_basereg  */
+
+generate_composite_function_nearest_scanline \
+    pixman_scaled_nearest_scanline_8_8888_SRC_asm_neon, 8, 0, 32, \
+    FLAG_DST_WRITEONLY | FLAG_DEINTERLEAVE_32BPP, \
+    8, /* number of pixels, processed in a single block */ \
+    pixman_composite_src_8_8888_init, \
+    default_cleanup, \
+    pixman_composite_src_8_8888_process_pixblock_head, \
+    pixman_composite_src_8_8888_process_pixblock_tail, \
+    pixman_composite_src_8_8888_process_pixblock_tail_head, \
+    0, /* dst_w_basereg */ \
+    0, /* dst_r_basereg */ \
+    3, /* src_basereg   */ \
+    0, /* mask_basereg  */ \
+    pixman_composite_src_8_8888_init
 
 generate_composite_function_nearest_scanline \
     pixman_scaled_nearest_scanline_8888_8888_OVER_asm_neon, 32, 0, 32, \
