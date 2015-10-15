@@ -3373,6 +3373,20 @@ generate_composite_function_nearest_scanline \
     0  /* mask_basereg  */
 
 generate_composite_function_nearest_scanline \
+    pixman_scaled_nearest_scanline_x888_8888_SRC_asm_neon, 32, 0, 32, \
+    FLAG_DST_WRITEONLY, \
+    8, /* number of pixels, processed in a single block */ \
+    pixman_composite_src_x888_8888_init, \
+    default_cleanup, \
+    pixman_composite_src_x888_8888_process_pixblock_head, \
+    pixman_composite_src_x888_8888_process_pixblock_tail, \
+    pixman_composite_src_x888_8888_process_pixblock_tail_head, \
+    0, /* dst_w_basereg */ \
+    0, /* dst_r_basereg */ \
+    0, /* src_basereg   */ \
+    0  /* mask_basereg  */
+
+generate_composite_function_nearest_scanline \
     pixman_scaled_nearest_scanline_8888_8888_OVER_asm_neon, 32, 0, 32, \
     FLAG_DST_READWRITE | FLAG_DEINTERLEAVE_32BPP, \
     8, /* number of pixels, processed in a single block */ \
