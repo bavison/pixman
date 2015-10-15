@@ -214,7 +214,56 @@
  * aliases to be defined)
  */
 .macro pixld1_s elem_size, reg1, mem_operand
-.if elem_size == 16
+.if elem_size == 8
+    mov     TMP1, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP1, mem_operand, TMP1
+    mov     TMP2, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP2, mem_operand, TMP2
+    vld1.8  {d&reg1&[0]}, [TMP1]
+    mov     TMP1, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP1, mem_operand, TMP1
+    vld1.8  {d&reg1&[1]}, [TMP2]
+    mov     TMP2, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP2, mem_operand, TMP2
+    vld1.8  {d&reg1&[2]}, [TMP1]
+    mov     TMP1, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP1, mem_operand, TMP1
+    vld1.8  {d&reg1&[3]}, [TMP2]
+    mov     TMP2, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP2, mem_operand, TMP2
+    vld1.8  {d&reg1&[4]}, [TMP1]
+    mov     TMP1, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP1, mem_operand, TMP1
+    vld1.8  {d&reg1&[5]}, [TMP2]
+    mov     TMP2, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP2, mem_operand, TMP2
+    vld1.8  {d&reg1&[6]}, [TMP1]
+    vld1.8  {d&reg1&[7]}, [TMP2]
+.elseif elem_size == 16
     mov     TMP1, VX, asr #16
     adds    VX, VX, UNIT_X
 5:  subpls  VX, VX, SRC_WIDTH_FIXED
@@ -282,7 +331,14 @@
 .endm
 
 .macro pixld0_s elem_size, reg1, idx, mem_operand
-.if elem_size == 16
+.if elem_size == 8
+    mov     TMP1, VX, asr #16
+    adds    VX, VX, UNIT_X
+5:  subpls  VX, VX, SRC_WIDTH_FIXED
+    bpl     5b
+    add     TMP1, mem_operand, TMP1
+    vld1.8  {d&reg1&[idx]}, [TMP1]
+.elseif elem_size == 16
     mov     TMP1, VX, asr #16
     adds    VX, VX, UNIT_X
 5:  subpls  VX, VX, SRC_WIDTH_FIXED
@@ -296,6 +352,8 @@
     bpl     5b
     add     TMP1, mem_operand, TMP1, asl #2
     vld1.32 {d&reg1&[idx]}, [TMP1, :32]
+.else
+    .error "unsupported"
 .endif
 .endm
 
@@ -463,7 +521,8 @@
  */
 .macro ensure_destination_ptr_alignment process_pixblock_head, \
                                         process_pixblock_tail, \
-                                        process_pixblock_tail_head
+                                        process_pixblock_tail_head, \
+                                        reinit
 .if dst_w_bpp != 24
     tst         DST_R, #0xF
     beq         2f
@@ -512,6 +571,7 @@ local skip1
 1:
 .endif
 .endr
+    reinit
 .endif
 2:
 .endm
@@ -640,7 +700,8 @@ local skip1
                                    dst_w_basereg_ = 28, \
                                    dst_r_basereg_ = 4, \
                                    src_basereg_   = 0, \
-                                   mask_basereg_  = 24
+                                   mask_basereg_  = 24, \
+                                   reinit
 
     pixman_asm_function fname
 
@@ -839,7 +900,8 @@ local skip1
 0:
     ensure_destination_ptr_alignment process_pixblock_head, \
                                      process_pixblock_tail, \
-                                     process_pixblock_tail_head
+                                     process_pixblock_tail_head, \
+                                     reinit
 
     /* Implement "head (tail_head) ... (tail_head) tail" loop pattern */
     pixld_a     pixblock_size, dst_r_bpp, \
@@ -957,7 +1019,8 @@ local skip1
                                                    dst_w_basereg_ = 28, \
                                                    dst_r_basereg_ = 4, \
                                                    src_basereg_   = 0, \
-                                                   mask_basereg_  = 24
+                                                   mask_basereg_  = 24, \
+                                                   reinit
 
     pixman_asm_function fname
 
@@ -1039,7 +1102,8 @@ local skip1
 
     ensure_destination_ptr_alignment process_pixblock_head, \
                                      process_pixblock_tail, \
-                                     process_pixblock_tail_head
+                                     process_pixblock_tail_head, \
+                                     reinit
 
     subs        W, W, #pixblock_size
     blt         7f
