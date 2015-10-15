@@ -181,6 +181,25 @@ fast_dest_fetch_noop (pixman_iter_t *iter, const uint32_t *mask)
     return iter->buffer;
 }
 
+#define DECLARE_NEAREST_SCALED_SCANLINE_FUNCTION(cputype, name, alias, type)   \
+void                                                                           \
+pixman_scaled_nearest_scanline_##alias##_8888_SRC_asm_##cputype (              \
+                                                int32_t         width,         \
+                                                uint32_t       *dest,          \
+                                                const type     *source,        \
+                                                pixman_fixed_t  x,             \
+                                                pixman_fixed_t  ux,            \
+                                                pixman_fixed_t  source_width);
+
+#define CALL_NEAREST_SCALED_SCANLINE_FUNCTION(                                 \
+        cputype, name, alias, width, x, ux, dest, source, mask, source_width)  \
+    pixman_scaled_nearest_scanline_##alias##_8888_SRC_asm_##cputype (          \
+        width, dest, source + source_width,                                    \
+        x - pixman_int_to_fixed (source_width), ux,                            \
+        pixman_int_to_fixed (source_width));
+
+PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, a8r8g8b8, 8888, uint32_t)
+
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
                                    int32_t   h,
@@ -482,6 +501,8 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
 
 static const pixman_iter_info_t arm_neon_iters[] =
 {
+    PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (neon, a8r8g8b8),
+
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, r5g6b5),
     PIXMAN_ARM_WRITEBACK (neon, r5g6b5),
 
