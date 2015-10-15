@@ -208,6 +208,7 @@ pixman_scaled_nearest_scanline_##alias##_8888_SRC_asm_##cputype (              \
 
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, a8r8g8b8, 8888, uint32_t)
 PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, x8r8g8b8, x888, uint32_t)
+PIXMAN_ARM_BIND_GET_SCANLINE_NEAREST_SCALED_COVER (neon, r5g6b5,   0565, uint16_t)
 
 void
 pixman_composite_src_n_8_asm_neon (int32_t   w,
@@ -522,6 +523,7 @@ static const pixman_iter_info_t arm_neon_iters[] =
     PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (neon, x8r8g8b8),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, r5g6b5),
+    PIXMAN_ARM_NEAREST_SCALED_COVER_FETCHER (neon, r5g6b5),
     PIXMAN_ARM_WRITEBACK (neon, r5g6b5),
 
     PIXMAN_ARM_UNTRANSFORMED_COVER_FETCHER (neon, a1r5g5b5),
