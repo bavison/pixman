@@ -503,19 +503,19 @@ fi
 AM_CONDITIONAL(USE_SSSE3, test $have_ssse3_intrinsics = yes)
 
 dnl ===========================================================================
-dnl Other special flags needed when building code using MMX or SSE instructions
+dnl Other special flags needed when building code using x86 ISA extensions
 case $host_os in
    solaris*)
-      # When building 32-bit binaries, apply a mapfile to ensure that the
-      # binaries aren't flagged as only able to run on MMX+SSE capable CPUs
-      # since they check at runtime before using those instructions.
+      # When building Solaris binaries, apply a mapfile to ensure that the
+      # binaries aren't flagged as only able to run on MMX/SSE/SSSE3 capable
+      # CPUs since they check at runtime before using those instructions.
       # Not all linkers grok the mapfile format so we check for that first.
-      if test "$AMD64_ABI" = "no" ; then
+      if test "$host_cpu" == "i386" -o "$host_cpu" == "x86_64"; then
 	 use_hwcap_mapfile=no
 	 AC_MSG_CHECKING(whether to use a hardware capability map file)
 	 hwcap_save_LDFLAGS="$LDFLAGS"
 	 HWCAP_LDFLAGS='-Wl,-M,$(srcdir)/solaris-hwcap.mapfile'
-	 LDFLAGS="$LDFLAGS -Wl,-M,pixman/solaris-hwcap.mapfile"
+	 LDFLAGS="$LDFLAGS -Wl,-M,${srcdir}/pixman/solaris-hwcap.mapfile"
 	 AC_LINK_IFELSE([AC_LANG_SOURCE([[int main() { return 0; }]])],
 			use_hwcap_mapfile=yes,
 			HWCAP_LDFLAGS="")
@@ -528,6 +528,9 @@ case $host_os in
       if test "x$SSE2_LDFLAGS" = "x" ; then
 	 SSE2_LDFLAGS="$HWCAP_LDFLAGS"
       fi
+      if test "x$SSSE3_LDFLAGS" = "x" ; then
+	 SSSE3_LDFLAGS="$HWCAP_LDFLAGS"
+      fi
       ;;
 esac
 
@@ -538,6 +541,7 @@ AC_SUBST(MMX_LDFLAGS)
 AC_SUBST(SSE2_CFLAGS)
 AC_SUBST(SSE2_LDFLAGS)
 AC_SUBST(SSSE3_CFLAGS)
+AC_SUBST(SSSE3_LDFLAGS)
 
 dnl ===========================================================================
 dnl Check for VMX/Altivec
