@@ -75,7 +75,7 @@ release-remove-old:
 	$(RM) $(tar_gz) $(tar_xz) $(HASHFILES) $(gpg_file)
 
 ensure-prev:
-	@if [[ "$(PREV)" == "" ]]; then							\
+	@if [ "$(PREV)" = "" ]; then							\
 		echo ""							          &&	\
 		echo "You must set the PREV variable on the make command line to" &&	\
 		echo "the last version."				  	  &&	\
