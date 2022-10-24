@@ -24,7 +24,7 @@ project(
   version : '0.42.1',
   license : 'MIT',
   meson_version : '>= 0.52.0',
-  default_options : ['buildtype=debugoptimized'],
+  default_options : ['c_std=gnu99', 'buildtype=debugoptimized'],
 )
 
 config = configuration_data()
