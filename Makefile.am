@@ -27,6 +27,7 @@ EXTRA_DIST =				\
 	meson.build			\
 	meson_options.txt		\
 	neon-test.S			\
+	a64-neon-test.S			\
 	arm-simd-test.S			\
 	$(NULL)
 
