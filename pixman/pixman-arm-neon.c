@@ -149,6 +149,7 @@ PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_0565,
 PIXMAN_ARM_BIND_SCALED_NEAREST_SRC_A8_DST (SKIP_ZERO_SRC, neon, 0565_8_0565,
                                            OVER, uint16_t, uint16_t)
 
+#ifndef __arm__
 PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 8888_8888, SRC,
                                          uint32_t, uint32_t)
 PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_DST (0, neon, 8888_0565, SRC,
@@ -175,7 +176,7 @@ PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, OV
 PIXMAN_ARM_BIND_SCALED_BILINEAR_SRC_A8_DST (SKIP_ZERO_SRC, neon, 8888_8_8888, ADD,
                                             uint32_t, uint32_t)
 
-#ifdef __arm__
+#else
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, r5g6b5)
 PIXMAN_ARM_BIND_GET_SCANLINE (neon, a1r5g5b5)
 
@@ -505,6 +506,7 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
     PIXMAN_ARM_SIMPLE_NEAREST_A8_MASK_FAST_PATH (OVER, r5g6b5, r5g6b5, neon_0565_8_0565),
     PIXMAN_ARM_SIMPLE_NEAREST_A8_MASK_FAST_PATH (OVER, b5g6r5, b5g6r5, neon_0565_8_0565),
 
+#ifndef __arm__
     SIMPLE_BILINEAR_FAST_PATH (SRC, a8r8g8b8, a8r8g8b8, neon_8888_8888),
     SIMPLE_BILINEAR_FAST_PATH (SRC, a8r8g8b8, x8r8g8b8, neon_8888_8888),
     SIMPLE_BILINEAR_FAST_PATH (SRC, x8r8g8b8, x8r8g8b8, neon_8888_8888),
@@ -538,6 +540,7 @@ static const pixman_fast_path_t arm_neon_fast_paths[] =
     SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, a8r8g8b8, a8r8g8b8, neon_8888_8_8888),
     SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, a8r8g8b8, x8r8g8b8, neon_8888_8_8888),
     SIMPLE_BILINEAR_A8_MASK_FAST_PATH (ADD, x8r8g8b8, x8r8g8b8, neon_8888_8_8888),
+#endif
 
     { PIXMAN_OP_NONE },
 };
